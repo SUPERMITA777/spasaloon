@@ -1,12 +1,16 @@
 import https from 'https';
+import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import { spawn } from 'child_process';
 
 export interface RemoteVersionInfo {
   version: string;
   appName?: string;
   releaseDate?: string;
   downloadUrl: string;
+  directDownloadUrl?: string;
   installerFileName?: string;
   changelog?: string;
 }
@@ -16,14 +20,33 @@ export interface UpdateCheckResult {
   currentVersion: string;
   latestVersion: string;
   downloadUrl: string;
+  directDownloadUrl?: string;
   installerFileName: string;
   changelog: string;
   releaseDate?: string;
   error?: string;
 }
 
+export interface DownloadProgress {
+  status: 'idle' | 'downloading' | 'completed' | 'error';
+  receivedBytes: number;
+  totalBytes: number;
+  percent: number;
+  filePath?: string;
+  error?: string;
+}
+
 const GITHUB_RAW_URL = 'https://raw.githubusercontent.com/SUPERMITA777/spasaloon/main/version.json';
 const DEFAULT_GDRIVE_URL = 'https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc';
+
+let currentDownload: DownloadProgress = {
+  status: 'idle',
+  receivedBytes: 0,
+  totalBytes: 0,
+  percent: 0,
+};
+
+let activeDownloadReq: http.ClientRequest | null = null;
 
 /**
  * Lee la versión local actual desde package.json
@@ -33,12 +56,12 @@ export function getLocalVersion(): string {
     const pkgPath = path.resolve(process.cwd(), 'package.json');
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      return pkg.version || '1.0.3';
+      return pkg.version || '1.0.4';
     }
   } catch (e) {
     console.error('Error leyendo versión local:', e);
   }
-  return '1.0.3';
+  return '1.0.4';
 }
 
 /**
@@ -125,6 +148,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       currentVersion,
       latestVersion,
       downloadUrl: remoteInfo.downloadUrl || DEFAULT_GDRIVE_URL,
+      directDownloadUrl: remoteInfo.directDownloadUrl,
       installerFileName: remoteInfo.installerFileName || `Hikari Suite Setup ${latestVersion}.exe`,
       changelog: remoteInfo.changelog || 'Actualización y mejoras en Hikari Suite.',
       releaseDate: remoteInfo.releaseDate,
@@ -142,3 +166,150 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     };
   }
 }
+
+/**
+ * Retorna el progreso actual de descarga
+ */
+export function getDownloadProgress(): DownloadProgress {
+  return currentDownload;
+}
+
+/**
+ * Inicia la descarga en streaming del instalador con soporte para redirecciones (HTTP 301, 302, 307)
+ */
+export function startDownloadUpdate(targetUrl: string, fileName?: string): Promise<DownloadProgress> {
+  if (currentDownload.status === 'downloading') {
+    return Promise.resolve(currentDownload);
+  }
+
+  const safeFileName = fileName || `Hikari_Suite_Setup_Update.exe`;
+  const tempDir = os.tmpdir();
+  const destPath = path.join(tempDir, safeFileName);
+
+  currentDownload = {
+    status: 'downloading',
+    receivedBytes: 0,
+    totalBytes: 0,
+    percent: 0,
+    filePath: destPath,
+  };
+
+  const downloadFileWithRedirects = (url: string, maxRedirects = 6) => {
+    if (maxRedirects <= 0) {
+      currentDownload.status = 'error';
+      currentDownload.error = 'Demasiadas redirecciones durante la descarga.';
+      return;
+    }
+
+    const client = url.startsWith('https') ? https : http;
+    const req = client.get(
+      url,
+      {
+        headers: {
+          'User-Agent': 'Hikari-Suite-Downloader/1.0',
+        },
+      },
+      (res) => {
+        // Manejar redirecciones (GitHub Releases usa AWS S3 con 302 redirect)
+        if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          return downloadFileWithRedirects(res.headers.location, maxRedirects - 1);
+        }
+
+        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+          currentDownload.status = 'error';
+          currentDownload.error = `Error de servidor HTTP ${res.statusCode}`;
+          return;
+        }
+
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        currentDownload.totalBytes = total;
+
+        const fileStream = fs.createWriteStream(destPath);
+        res.on('data', (chunk: Buffer) => {
+          currentDownload.receivedBytes += chunk.length;
+          if (currentDownload.totalBytes > 0) {
+            currentDownload.percent = Math.min(
+              100,
+              Math.round((currentDownload.receivedBytes / currentDownload.totalBytes) * 100)
+            );
+          }
+        });
+
+        res.pipe(fileStream);
+
+        fileStream.on('finish', () => {
+          fileStream.close();
+          currentDownload.status = 'completed';
+          currentDownload.percent = 100;
+          activeDownloadReq = null;
+        });
+
+        fileStream.on('error', (err) => {
+          fs.unlink(destPath, () => {});
+          currentDownload.status = 'error';
+          currentDownload.error = err.message;
+          activeDownloadReq = null;
+        });
+      }
+    );
+
+    req.on('error', (err) => {
+      currentDownload.status = 'error';
+      currentDownload.error = err.message;
+      activeDownloadReq = null;
+    });
+
+    activeDownloadReq = req;
+  };
+
+  downloadFileWithRedirects(targetUrl);
+  return Promise.resolve(currentDownload);
+}
+
+/**
+ * Cancela una descarga activa
+ */
+export function cancelDownloadUpdate(): void {
+  if (activeDownloadReq) {
+    activeDownloadReq.destroy();
+    activeDownloadReq = null;
+  }
+  if (currentDownload.filePath && fs.existsSync(currentDownload.filePath)) {
+    try {
+      fs.unlinkSync(currentDownload.filePath);
+    } catch (e) {}
+  }
+  currentDownload = {
+    status: 'idle',
+    receivedBytes: 0,
+    totalBytes: 0,
+    percent: 0,
+  };
+}
+
+/**
+ * Ejecuta el instalador descargado en segundo plano de manera desatendida y cierra la app actual
+ */
+export function launchInstallerAndExit(filePath?: string): boolean {
+  const targetFile = filePath || currentDownload.filePath;
+  if (!targetFile || !fs.existsSync(targetFile)) {
+    throw new Error('El archivo del instalador no existe o no se ha completado la descarga.');
+  }
+
+  // Lanzar el ejecutable de instalación de forma desacoplada
+  const child = spawn(`"${targetFile}"`, [], {
+    detached: true,
+    stdio: 'ignore',
+    shell: true,
+  });
+
+  child.unref();
+
+  // Esperar 1 segundo para asegurar que el proceso se desprendió y salir
+  setTimeout(() => {
+    process.exit(0);
+  }, 1000);
+
+  return true;
+}
+

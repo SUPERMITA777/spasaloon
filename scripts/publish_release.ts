@@ -58,6 +58,7 @@ export const GDRIVE_FOLDER_URL = '${gdriveFolderUrl}';
     appName: 'Hikari Suite',
     releaseDate: new Date().toISOString().split('T')[0],
     downloadUrl: gdriveFolderUrl,
+    directDownloadUrl: `https://github.com/SUPERMITA777/spasaloon/releases/download/v${newVersion}/Hikari.Suite.Setup.${newVersion}.exe`,
     installerFileName: `Hikari Suite Setup ${newVersion}.exe`,
     changelog: `Actualización automática a la versión v${newVersion}.`,
   };

@@ -140,17 +140,58 @@ export const api = {
   openBackupFolder: () => request<{ success: boolean }>('/backup/open-folder', { method: 'POST' }),
   shutdownSystem: () => request<{ success: boolean; message: string }>('/system/shutdown', { method: 'POST' }),
 
-  // Verificación de Actualizaciones (GitHub / Google Drive)
+  // Verificación y Auto-Actualización (GitHub / Google Drive)
   checkUpdates: () => request<{
     success: boolean;
     updateAvailable: boolean;
     currentVersion: string;
     latestVersion: string;
     downloadUrl: string;
+    directDownloadUrl?: string;
     installerFileName: string;
     changelog: string;
     releaseDate?: string;
     error?: string;
   }>('/system/check-updates'),
+
+  startDownloadUpdate: (url: string, fileName?: string) =>
+    request<{
+      success: boolean;
+      progress: {
+        status: 'idle' | 'downloading' | 'completed' | 'error';
+        receivedBytes: number;
+        totalBytes: number;
+        percent: number;
+        filePath?: string;
+        error?: string;
+      };
+    }>('/system/download-update', {
+      method: 'POST',
+      body: JSON.stringify({ url, fileName }),
+    }),
+
+  getDownloadProgress: () =>
+    request<{
+      success: boolean;
+      progress: {
+        status: 'idle' | 'downloading' | 'completed' | 'error';
+        receivedBytes: number;
+        totalBytes: number;
+        percent: number;
+        filePath?: string;
+        error?: string;
+      };
+    }>('/system/download-progress'),
+
+  cancelDownloadUpdate: () =>
+    request<{ success: boolean; message: string }>('/system/cancel-download', {
+      method: 'POST',
+    }),
+
+  installUpdate: (filePath?: string) =>
+    request<{ success: boolean; message: string }>('/system/install-update', {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    }),
 };
 
