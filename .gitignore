@@ -1,0 +1,29 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+dist-electron/
+dist-package/
+dist-app/
+*.tmp/
+
+# SQLite runtime files & emergency backups
+*.db-wal
+*.db-shm
+*.db.pre_restore_seguridad.bak
+backups/
+
+# Logs & temp
+*.log
+.DS_Store
+Thumbs.db
+
+# Environment variables & Google Drive credentials
+.env
+.env.local
+*credentials.json
+service_account.json

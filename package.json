@@ -1,0 +1,116 @@
+{
+  "name": "hikari-suite-gestion",
+  "version": "1.0.3",
+  "description": "Hikari Suite — Sistema Integral de Gestión para Centros de Salud, Estética, Spas y Salones",
+  "main": "dist-electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "tsx server/index.ts",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "server": "tsx server/index.ts",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "build:electron": "npx esbuild electron/main.ts --bundle --platform=node --target=node20 --outfile=dist-electron/main.cjs --format=cjs --external:electron --external:better-sqlite3 && npx esbuild electron/preload.ts --bundle --platform=node --target=node20 --outfile=dist-electron/preload.cjs --format=cjs --external:electron",
+    "build:all": "npm run rebuild:electron && npm run build && npm run build:electron",
+    "electron": "electron .",
+    "dev:all": "concurrently -k \"npm run server\" \"npm run dev\"",
+    "dist:dir": "npm run build:all && electron-builder --dir",
+    "dist:exe": "npm run build:all && electron-builder --win nsis portable",
+    "dist:linux": "npm run build:all && electron-builder --linux AppImage deb",
+    "release": "tsx scripts/publish_release.ts"
+  },
+  "build": {
+    "appId": "com.hikari.suite.gestion",
+    "productName": "Hikari Suite",
+    "npmRebuild": false,
+    "copyright": "Copyright © 2026 Hikari Suite",
+    "directories": {
+      "output": "dist-package"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "server/**/*",
+      "data/**/*",
+      "node_modules/**/*"
+    ],
+    "asarUnpack": [
+      "**/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Hikari Suite"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Office",
+      "maintainer": "Hikari Suite <soporte@hikari-suite.com>"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "express": "^4.21.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.2",
+    "lucide-react": "^0.475.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "tailwind-merge": "^3.0.1",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.1",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.1.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0",
+    "postcss": "^8.5.2",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

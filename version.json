@@ -1,0 +1,8 @@
+{
+  "version": "1.0.3",
+  "appName": "Hikari Suite",
+  "releaseDate": "2026-09-07",
+  "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
+  "installerFileName": "Hikari Suite Setup 1.0.3.exe",
+  "changelog": "Sincronización con repositorio oficial de GitHub, comprobación automática de versiones y descarga desde Google Drive."
+}
