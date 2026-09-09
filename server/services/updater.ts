@@ -164,7 +164,8 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const currentVersion = getLocalVersion();
 
   try {
-    const remoteInfo = await fetchRemoteVersion(GITHUB_RAW_URL, 6000);
+    const cacheBusterUrl = `${GITHUB_RAW_URL}?_t=${Date.now()}`;
+    const remoteInfo = await fetchRemoteVersion(cacheBusterUrl, 6000);
     const latestVersion = remoteInfo.version || currentVersion;
     const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
 
