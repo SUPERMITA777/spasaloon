@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import QRCode from 'qrcode';
 import { db } from '../db/database.js';
 import { io } from '../index.js';
@@ -67,6 +69,74 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/sync/ios-profile - Descarga de perfil de configuración WebClip para iOS (instalación nativa autónoma)
+syncRouter.get('/ios-profile', (req, res) => {
+  try {
+    const localIp = getLocalIpAddress();
+    const port = Number(process.env.PORT) || 3100;
+    const targetUrl = activeTunnelUrl ? `${activeTunnelUrl}/mobile` : `http://${localIp}:${port}/mobile`;
+
+    let iconBase64 = '';
+    const iconPath = path.resolve(process.cwd(), 'public/apple-touch-icon.png');
+    if (fs.existsSync(iconPath)) {
+      iconBase64 = fs.readFileSync(iconPath).toString('base64');
+    }
+
+    const mobileConfigXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>FullScreen</key>
+            <true/>
+            <key>IsRemovable</key>
+            <true/>
+            ${iconBase64 ? `<key>Icon</key>\n            <data>\n${iconBase64}\n            </data>` : ''}
+            <key>Label</key>
+            <string>Hikari Suite</string>
+            <key>PayloadDescription</key>
+            <string>Acceso autónomo a Hikari Suite en la pantalla de inicio sin barras de navegador.</string>
+            <key>PayloadDisplayName</key>
+            <string>Hikari Suite</string>
+            <key>PayloadIdentifier</key>
+            <string>com.hikari.suite.webclip</string>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadUUID</key>
+            <string>e7c8e762-23c2-4889-b883-fa4c88db9a11</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>Precomposed</key>
+            <true/>
+            <key>URL</key>
+            <string>${targetUrl}</string>
+        </dict>
+    </array>
+    <key>PayloadDisplayName</key>
+    <string>Hikari Suite — App Móvil</string>
+    <key>PayloadIdentifier</key>
+    <string>com.hikari.suite.profile</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>9a71b238-1644-4824-8b64-8ff1f618bcf3</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+</dict>
+</plist>`;
+
+    res.setHeader('Content-Type', 'application/x-apple-as-profile; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="HikariSuite.mobileconfig"');
+    res.send(mobileConfigXml);
+  } catch (error: any) {
+    res.status(500).send(error.message);
   }
 });
 

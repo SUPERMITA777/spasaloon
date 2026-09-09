@@ -93,8 +93,12 @@ export const MobileAppView: React.FC = () => {
   const [newServiceDuration, setNewServiceDuration] = useState<number>(60);
   const [newServiceTreatmentId, setNewServiceTreatmentId] = useState<string>('');
 
-  // PWA banner
+  // PWA banner y detección de App Autónoma (Standalone)
   const [showPwaBanner, setShowPwaBanner] = useState<boolean>(true);
+  const isStandalone =
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true);
 
   // Iniciar sincronización y listeners
   useEffect(() => {
@@ -497,6 +501,54 @@ export const MobileAppView: React.FC = () => {
             <span>Sin internet. Trabajando con datos locales en tu teléfono.</span>
           </div>
           <span className="text-[10px] bg-white/20 px-1.5 py-0.2 rounded font-mono">OFFLINE</span>
+        </div>
+      )}
+
+      {/* Banner de Instalación como App Autónoma (Solo visible si está en Safari / Navegador) */}
+      {!isStandalone && showPwaBanner && (
+        <div className="bg-gradient-to-r from-rose-gold-800 via-rose-gold-700 to-rose-gold-900 text-white p-3.5 shadow-md border-b border-rose-gold-400/50">
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="flex items-start gap-2.5">
+              <div className="p-2 rounded-xl bg-white/15 backdrop-blur-xs shrink-0 mt-0.5 shadow-inner">
+                <Smartphone className="w-5 h-5 text-white" />
+              </div>
+              <div className="space-y-1 text-xs">
+                <div className="font-bold flex items-center gap-1.5">
+                  <span>Instalar como App Autónoma</span>
+                  <span className="px-1.5 py-0.2 rounded bg-amber-400/30 text-amber-200 text-[10px] font-mono uppercase">
+                    Sin Safari
+                  </span>
+                </div>
+                <p className="text-[11px] text-white/90 leading-tight">
+                  Para que funcione a pantalla completa sin barras de navegador ni URL:
+                </p>
+                <div className="bg-black/25 p-2 rounded-xl mt-1 space-y-1.5 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1 leading-snug">
+                    <span>🍏 <strong>En iPhone:</strong> Toca</span>
+                    <span className="bg-white/20 px-1.5 py-0.5 rounded font-mono text-[10px] font-bold">Compartir ⎋</span>
+                    <span>y elige</span>
+                    <span className="bg-white/20 px-1.5 py-0.5 rounded font-bold text-[10px]">"Agregar a Inicio" ➕</span>
+                  </div>
+                  <div className="pt-1 border-t border-white/15 flex items-center justify-between gap-2">
+                    <a
+                      href="/api/sync/ios-profile"
+                      download="HikariSuite.mobileconfig"
+                      className="text-[10px] text-rose-gold-200 underline font-bold hover:text-white transition-colors"
+                    >
+                      O descarga el Perfil de Instalación iOS (.mobileconfig)
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPwaBanner(false)}
+              className="p-1 rounded-lg bg-white/15 hover:bg-white/25 text-white transition-colors shrink-0"
+              title="Cerrar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
