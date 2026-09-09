@@ -75,6 +75,9 @@ function uploadAssetStream(uploadUrl: string, filePath: string): Promise<{ statu
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(uploadUrl);
     const fileSize = fs.statSync(filePath).size;
+    let uploadedBytes = 0;
+    let lastLoggedPercent = 0;
+
     const req = https.request({
       protocol: parsedUrl.protocol,
       hostname: parsedUrl.hostname,
@@ -108,6 +111,14 @@ function uploadAssetStream(uploadUrl: string, filePath: string): Promise<{ statu
 
     req.on('error', reject);
     const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk: Buffer) => {
+      uploadedBytes += chunk.length;
+      const percent = Math.floor((uploadedBytes / fileSize) * 100);
+      if (percent >= lastLoggedPercent + 20 || percent === 100) {
+        lastLoggedPercent = percent;
+        console.log(`   ⏳ Subiendo: ${percent}% (${(uploadedBytes / (1024 * 1024)).toFixed(1)} / ${(fileSize / (1024 * 1024)).toFixed(1)} MB)`);
+      }
+    });
     stream.pipe(req);
   });
 }
@@ -180,7 +191,7 @@ async function run() {
   }
 
   console.log('\n🎉 ¡Publicación completada en GitHub Releases!');
-  console.log(`🔗 URL directa de descarga: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG_NAME}/Hikari.Suite.Setup.1.0.8.exe`);
+  console.log(`🔗 URL directa de descarga: https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${TAG_NAME}/Hikari.Suite.Setup.${currentVersion}.exe`);
 }
 
 run().catch((err) => {

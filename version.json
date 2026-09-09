@@ -1,9 +1,9 @@
 {
-  "version": "1.0.13",
+  "version": "1.0.14",
   "appName": "Hikari Suite",
   "releaseDate": "2026-09-09",
   "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
-  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.13/Hikari.Suite.Setup.1.0.13.exe",
-  "installerFileName": "Hikari Suite Setup 1.0.13.exe",
-  "changelog": "Versión 1.0.13: Normalización de secuencia de versionado continuo (1.0.x), sistema de triple redundancia para chequeo de actualizaciones (GitHub API + jsDelivr CDN + GitHub Raw) y corrección de avisos de estado."
+  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.14/Hikari.Suite.Setup.1.0.14.exe",
+  "installerFileName": "Hikari Suite Setup 1.0.14.exe",
+  "changelog": "Versión 1.0.14: Corrección crítica del sistema de auto-actualización: publicación automatizada de instaladores ejecutables en GitHub Releases, resolución dinámica de URLs de descarga con fallback inteligente y compatibilidad directa de nombres de archivo."
 }

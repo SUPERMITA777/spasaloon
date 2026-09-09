@@ -240,7 +240,30 @@ export function getDownloadProgress(): DownloadProgress {
 }
 
 /**
- * Inicia la descarga en streaming del instalador con soporte para redirecciones (HTTP 301, 302, 307)
+ * Resuelve dinámicamente el URL directo del instalador .exe consultando la API de GitHub Releases
+ */
+async function resolveGithubAssetUrl(targetUrl: string): Promise<string | null> {
+  try {
+    const match = targetUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/releases\/download\/([^\/]+)\//);
+    if (!match) return null;
+    const [, owner, repo, tag] = match;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`;
+    const info = await fetchRemoteVersion(apiUrl, 5000);
+    const assets = (info as any).assets;
+    if (Array.isArray(assets) && assets.length > 0) {
+      const exeAsset = assets.find((a: any) => a.name && a.name.toLowerCase().endsWith('.exe'));
+      if (exeAsset && exeAsset.browser_download_url) {
+        return exeAsset.browser_download_url;
+      }
+    }
+  } catch {
+    // Continuar si no se pudo resolver
+  }
+  return null;
+}
+
+/**
+ * Inicia la descarga en streaming del instalador con soporte para redirecciones y resolución inteligente de fallbacks
  */
 export function startDownloadUpdate(targetUrl: string, fileName?: string): Promise<DownloadProgress> {
   if (currentDownload.status === 'downloading') {
@@ -259,11 +282,58 @@ export function startDownloadUpdate(targetUrl: string, fileName?: string): Promi
     filePath: destPath,
   };
 
-  const downloadFileWithRedirects = (url: string, maxRedirects = 6) => {
-    if (maxRedirects <= 0) {
+  const attemptDownload = async () => {
+    // Generar candidatos de descarga
+    const candidates: string[] = [targetUrl];
+
+    // Candidato alternativo con espacios <-> puntos
+    if (targetUrl.includes('.')) {
+      const dotVariant = targetUrl.replace(/\s+/g, '.');
+      if (!candidates.includes(dotVariant)) candidates.push(dotVariant);
+    }
+    if (targetUrl.includes('%20') || targetUrl.includes(' ')) {
+      const encodedVariant = targetUrl.replace(/ /g, '%20');
+      if (!candidates.includes(encodedVariant)) candidates.push(encodedVariant);
+    }
+
+    let downloadSucceeded = false;
+
+    for (const candidateUrl of candidates) {
+      const success = await tryStreamDownload(candidateUrl, destPath);
+      if (success) {
+        downloadSucceeded = true;
+        break;
+      }
+    }
+
+    // Si los candidatos iniciales fallan con 404, intentar resolver por la API de GitHub Releases
+    if (!downloadSucceeded) {
+      const resolvedUrl = await resolveGithubAssetUrl(targetUrl);
+      if (resolvedUrl && !candidates.includes(resolvedUrl)) {
+        const success = await tryStreamDownload(resolvedUrl, destPath);
+        if (success) {
+          downloadSucceeded = true;
+        }
+      }
+    }
+
+    if (!downloadSucceeded && currentDownload.status !== 'completed') {
       currentDownload.status = 'error';
+      if (!currentDownload.error) {
+        currentDownload.error = 'El instalador no se encuentra disponible temporalmente en GitHub Releases (HTTP 404). Por favor descarga manualmente desde Google Drive.';
+      }
+    }
+  };
+
+  attemptDownload();
+  return Promise.resolve(currentDownload);
+}
+
+function tryStreamDownload(url: string, destPath: string, maxRedirects = 6): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (maxRedirects <= 0) {
       currentDownload.error = 'Demasiadas redirecciones durante la descarga.';
-      return;
+      return resolve(false);
     }
 
     const client = url.startsWith('https') ? https : http;
@@ -277,17 +347,17 @@ export function startDownloadUpdate(targetUrl: string, fileName?: string): Promi
       (res) => {
         // Manejar redirecciones (GitHub Releases usa AWS S3 con 302 redirect)
         if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-          return downloadFileWithRedirects(res.headers.location, maxRedirects - 1);
+          return tryStreamDownload(res.headers.location, destPath, maxRedirects - 1).then(resolve);
         }
 
         if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-          currentDownload.status = 'error';
           currentDownload.error = `Error de servidor HTTP ${res.statusCode}`;
-          return;
+          return resolve(false);
         }
 
         const total = parseInt(res.headers['content-length'] || '0', 10);
         currentDownload.totalBytes = total;
+        currentDownload.receivedBytes = 0;
 
         const fileStream = fs.createWriteStream(destPath);
         res.on('data', (chunk: Buffer) => {
@@ -307,28 +377,26 @@ export function startDownloadUpdate(targetUrl: string, fileName?: string): Promi
           currentDownload.status = 'completed';
           currentDownload.percent = 100;
           activeDownloadReq = null;
+          resolve(true);
         });
 
         fileStream.on('error', (err) => {
           fs.unlink(destPath, () => {});
-          currentDownload.status = 'error';
           currentDownload.error = err.message;
           activeDownloadReq = null;
+          resolve(false);
         });
       }
     );
 
     req.on('error', (err) => {
-      currentDownload.status = 'error';
       currentDownload.error = err.message;
       activeDownloadReq = null;
+      resolve(false);
     });
 
     activeDownloadReq = req;
-  };
-
-  downloadFileWithRedirects(targetUrl);
-  return Promise.resolve(currentDownload);
+  });
 }
 
 /**

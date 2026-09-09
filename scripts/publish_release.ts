@@ -110,7 +110,18 @@ export const GDRIVE_FOLDER_URL = '${gdriveFolderUrl}';
     console.warn('\nNota sobre Git:', err.message || err);
   }
 
-  // 9. Subida a Google Drive
+  // 9. Crear Release en GitHub y subir instalador ejecutable
+  console.log('\n======================================================');
+  console.log('🚀 PUBLICACIÓN AUTOMÁTICA EN GITHUB RELEASES');
+  console.log('======================================================');
+  try {
+    execSync('npx tsx scripts/upload_to_github_release.ts', { stdio: 'inherit' });
+    console.log(`\n✔ Release v${newVersion} y binario .exe publicados exitosamente en GitHub.`);
+  } catch (err: any) {
+    console.warn('\n⚠️ Advertencia al subir a GitHub Releases:', err.message || err);
+  }
+
+  // 10. Respaldo secundario en Google Drive
   console.log('\n======================================================');
   console.log('☁️ GESTIÓN DE SUBIDA A GOOGLE DRIVE');
   console.log('======================================================');

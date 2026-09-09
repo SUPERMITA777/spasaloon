@@ -1,6 +1,6 @@
 {
   "name": "hikari-suite-gestion",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Hikari Suite — Sistema Integral de Gestión para Centros de Salud, Estética, Spas y Salones",
   "main": "dist-electron/main.cjs",
   "type": "module",
@@ -18,7 +18,8 @@
     "dist:dir": "npm run build:all && electron-builder --dir",
     "dist:exe": "npm run build:all && electron-builder --win nsis portable",
     "dist:linux": "npm run build:all && electron-builder --linux AppImage deb",
-    "release": "tsx scripts/publish_release.ts"
+    "release": "tsx scripts/publish_release.ts",
+    "release:upload": "tsx scripts/upload_to_github_release.ts"
   },
   "build": {
     "appId": "com.hikari.suite.gestion",
