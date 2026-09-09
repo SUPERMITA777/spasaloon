@@ -6,14 +6,33 @@ import { getLocalIpAddress } from '../services/network.js';
 
 export const syncRouter = Router();
 
+// Estado del túnel para conexión a distancia
+let activeTunnel: any = null;
+let activeTunnelUrl: string | null = null;
+
+// Cola de conflictos pendientes para ser revisados y confirmados en el servidor
+interface PendingConflict {
+  id: string;
+  mutationId: string;
+  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
+  entityId: string;
+  entityDescription: string;
+  mobileData: any;
+  serverData: any;
+  diffFields: string[];
+  createdAt: string;
+}
+
+const pendingConflictsMap = new Map<string, PendingConflict>();
+
 // GET /api/sync/mobile-app-info - Información de conexión y QR para iPhone y Android
 syncRouter.get('/mobile-app-info', async (req, res) => {
   try {
     const localIp = getLocalIpAddress();
     const port = Number(process.env.PORT) || 3100;
-    const mobileUrl = `http://${localIp}:${port}/mobile`;
+    const localMobileUrl = `http://${localIp}:${port}/mobile`;
 
-    const qrCodeDataUrl = await QRCode.toDataURL(mobileUrl, {
+    const localQrCodeDataUrl = await QRCode.toDataURL(localMobileUrl, {
       width: 320,
       margin: 2,
       color: {
@@ -22,16 +41,94 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
       },
     });
 
+    let remoteQrCodeDataUrl: string | null = null;
+    if (activeTunnelUrl) {
+      remoteQrCodeDataUrl = await QRCode.toDataURL(`${activeTunnelUrl}/mobile`, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: '#935F4C',
+          light: '#FAF5EE',
+        },
+      });
+    }
+
     res.json({
       success: true,
       localIp,
       port,
-      mobileUrl,
-      qrCodeDataUrl,
+      mobileUrl: activeTunnelUrl ? `${activeTunnelUrl}/mobile` : localMobileUrl,
+      localMobileUrl,
+      localQrCodeDataUrl,
+      isTunnelActive: !!activeTunnelUrl,
+      remoteMobileUrl: activeTunnelUrl ? `${activeTunnelUrl}/mobile` : null,
+      remoteQrCodeDataUrl,
+      pendingConflictsCount: pendingConflictsMap.size,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// POST /api/sync/toggle-remote-tunnel - Activa o desactiva la conexión a distancia
+syncRouter.post('/toggle-remote-tunnel', async (req, res) => {
+  try {
+    const port = Number(process.env.PORT) || 3100;
+
+    if (activeTunnel) {
+      try {
+        activeTunnel.close();
+      } catch {}
+      activeTunnel = null;
+      activeTunnelUrl = null;
+      io.emit('sync:tunnel-status', { isTunnelActive: false, remoteMobileUrl: null });
+      return res.json({ success: true, isTunnelActive: false, message: 'Túnel a distancia desconectado.' });
+    }
+
+    // Iniciar nuevo túnel seguro localtunnel
+    const localtunnel = (await import('localtunnel')).default;
+    const tunnel = await localtunnel({ port });
+    activeTunnel = tunnel;
+    activeTunnelUrl = tunnel.url;
+
+    tunnel.on('close', () => {
+      activeTunnel = null;
+      activeTunnelUrl = null;
+      io.emit('sync:tunnel-status', { isTunnelActive: false, remoteMobileUrl: null });
+    });
+
+    const remoteQrCodeDataUrl = await QRCode.toDataURL(`${activeTunnelUrl}/mobile`, {
+      width: 320,
+      margin: 2,
+      color: {
+        dark: '#935F4C',
+        light: '#FAF5EE',
+      },
+    });
+
+    io.emit('sync:tunnel-status', {
+      isTunnelActive: true,
+      remoteMobileUrl: `${activeTunnelUrl}/mobile`,
+    });
+
+    res.json({
+      success: true,
+      isTunnelActive: true,
+      remoteMobileUrl: `${activeTunnelUrl}/mobile`,
+      remoteQrCodeDataUrl,
+      message: 'Conexión a distancia activada con éxito.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/sync/pending-conflicts - Lista los conflictos pendientes para confirmación en el servidor
+syncRouter.get('/pending-conflicts', (req, res) => {
+  res.json({
+    success: true,
+    conflicts: Array.from(pendingConflictsMap.values()),
+  });
 });
 
 // GET /api/sync/snapshot - Retorna copia completa para sembrar el almacenamiento local del móvil
@@ -61,7 +158,6 @@ syncRouter.get('/snapshot', (req, res) => {
       ORDER BY a.start_time ASC
     `).all();
 
-    // Formatear appointments anidando objetos relacionados
     const formattedAppts = appointments.map((a: any) => ({
       ...a,
       client: a.client_id ? { id: a.client_id, first_name: a.client_first_name, last_name: a.client_last_name, phone: a.client_phone } : null,
@@ -72,7 +168,6 @@ syncRouter.get('/snapshot', (req, res) => {
       cart_items: db.prepare('SELECT * FROM appointment_cart_items WHERE appointment_id = ?').all(a.id),
     }));
 
-    // Formatear treatments con sub-tratamientos
     const formattedTreatments = treatments.map((t: any) => ({
       ...t,
       sub_treatments: subTreatments.filter((st: any) => st.treatment_id === t.id),
@@ -84,6 +179,7 @@ syncRouter.get('/snapshot', (req, res) => {
       data: {
         clients,
         treatments: formattedTreatments,
+        sub_treatments: subTreatments,
         boxes,
         staff,
         products,
@@ -103,12 +199,13 @@ syncRouter.post('/batch', (req, res) => {
   }
 
   const processedIds: string[] = [];
-  const conflicts: any[] = [];
+  const newConflicts: PendingConflict[] = [];
 
   const executeBatch = db.transaction(() => {
     for (const m of mutations) {
       const { id, entity, action, entityId, data, clientTimestamp, lastSyncedAt } = m;
 
+      // 1. GESTIÓN DE CITAS / TURNOS
       if (entity === 'appointment') {
         if (action === 'create') {
           const existing = db.prepare('SELECT id FROM appointments WHERE id = ?').get(entityId);
@@ -138,14 +235,10 @@ syncRouter.post('/batch', (req, res) => {
         } else if (action === 'update') {
           const current: any = db.prepare('SELECT * FROM appointments WHERE id = ?').get(entityId);
           if (!current) {
-            // El turno no existe en el servidor, no hay conflicto, se descarta o recrea
             processedIds.push(id);
             continue;
           }
 
-          // Detección de discrepancias:
-          // Si el registro del servidor fue modificado después de la última sincronización del móvil
-          // y los datos difieren en campos clave (start_time, status, notes, staff_id)
           const serverUpdated = new Date(current.updated_at || current.created_at).getTime();
           const clientSynced = lastSyncedAt ? new Date(lastSyncedAt).getTime() : 0;
 
@@ -153,30 +246,34 @@ syncRouter.post('/batch', (req, res) => {
             (data.start_time && data.start_time !== current.start_time) ||
             (data.status && data.status !== current.status) ||
             (data.notes !== undefined && data.notes !== current.notes) ||
-            (data.staff_id && data.staff_id !== current.staff_id);
+            (data.staff_id && data.staff_id !== current.staff_id) ||
+            (data.box_id && data.box_id !== current.box_id) ||
+            (data.service_price !== undefined && Number(data.service_price) !== Number(current.service_price));
 
           if (serverUpdated > clientSynced && hasDiverged) {
-            // Registrar conflicto para consultar al operador
-            conflicts.push({
+            // Se detectó discrepancia: Registrar para confirmación en el servidor
+            const conflict: PendingConflict = {
+              id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
               mutationId: id,
               entity: 'appointment',
               entityId,
-              entityDescription: `Turno #${entityId.substring(0, 8)}`,
-              mobileData: {
-                ...current,
-                ...data,
-                clientTimestamp,
-              },
+              entityDescription: `Cita #${entityId.substring(0, 8)} (${data.start_time || current.start_time})`,
+              mobileData: { ...current, ...data, clientTimestamp },
               serverData: current,
               diffFields: [
                 data.start_time !== current.start_time ? 'start_time' : null,
                 data.status !== current.status ? 'status' : null,
                 data.notes !== current.notes ? 'notes' : null,
                 data.staff_id !== current.staff_id ? 'staff_id' : null,
-              ].filter(Boolean),
-            });
+                data.service_price !== current.service_price ? 'service_price' : null,
+              ].filter(Boolean) as string[],
+              createdAt: new Date().toISOString(),
+            };
+
+            pendingConflictsMap.set(conflict.id, conflict);
+            newConflicts.push(conflict);
           } else {
-            // No hay conflicto: aplicar actualización limpia
+            // Sin conflicto: aplicar actualización directamente
             const fields: string[] = [];
             const values: any[] = [];
 
@@ -186,6 +283,8 @@ syncRouter.post('/batch', (req, res) => {
             if (data.box_id) { fields.push('box_id = ?'); values.push(data.box_id); }
             if (data.status) { fields.push('status = ?'); values.push(data.status); }
             if (data.notes !== undefined) { fields.push('notes = ?'); values.push(data.notes); }
+            if (data.service_price !== undefined) { fields.push('service_price = ?'); values.push(data.service_price); }
+            if (data.deposit_amount !== undefined) { fields.push('deposit_amount = ?'); values.push(data.deposit_amount); }
             fields.push('updated_at = ?');
             values.push(new Date().toISOString());
 
@@ -193,8 +292,17 @@ syncRouter.post('/batch', (req, res) => {
             db.prepare(`UPDATE appointments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
             processedIds.push(id);
           }
+        } else if (action === 'delete') {
+          db.prepare('UPDATE appointments SET status = "cancelled", updated_at = ? WHERE id = ?').run(
+            new Date().toISOString(),
+            entityId
+          );
+          processedIds.push(id);
         }
-      } else if (entity === 'client') {
+      }
+
+      // 2. GESTIÓN DE CLIENTES
+      else if (entity === 'client') {
         if (action === 'create') {
           const existing = db.prepare('SELECT id FROM clients WHERE id = ?').get(entityId);
           if (!existing) {
@@ -218,18 +326,154 @@ syncRouter.post('/batch', (req, res) => {
         } else if (action === 'update') {
           const current: any = db.prepare('SELECT * FROM clients WHERE id = ?').get(entityId);
           if (current) {
-            const fields: string[] = [];
-            const values: any[] = [];
-            if (data.first_name) { fields.push('first_name = ?'); values.push(data.first_name); }
-            if (data.last_name) { fields.push('last_name = ?'); values.push(data.last_name); }
-            if (data.phone !== undefined) { fields.push('phone = ?'); values.push(data.phone); }
-            if (data.email !== undefined) { fields.push('email = ?'); values.push(data.email); }
-            if (data.notes !== undefined) { fields.push('notes = ?'); values.push(data.notes); }
-            fields.push('updated_at = ?');
-            values.push(new Date().toISOString());
-            values.push(entityId);
-            db.prepare(`UPDATE clients SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+            const serverUpdated = new Date(current.updated_at || current.created_at).getTime();
+            const clientSynced = lastSyncedAt ? new Date(lastSyncedAt).getTime() : 0;
+
+            const hasDiverged =
+              (data.first_name && data.first_name !== current.first_name) ||
+              (data.last_name && data.last_name !== current.last_name) ||
+              (data.phone !== undefined && data.phone !== current.phone) ||
+              (data.email !== undefined && data.email !== current.email);
+
+            if (serverUpdated > clientSynced && hasDiverged) {
+              const conflict: PendingConflict = {
+                id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                mutationId: id,
+                entity: 'client',
+                entityId,
+                entityDescription: `Cliente: ${data.first_name || current.first_name} ${data.last_name || current.last_name}`,
+                mobileData: { ...current, ...data, clientTimestamp },
+                serverData: current,
+                diffFields: [
+                  data.first_name !== current.first_name ? 'first_name' : null,
+                  data.last_name !== current.last_name ? 'last_name' : null,
+                  data.phone !== current.phone ? 'phone' : null,
+                  data.email !== current.email ? 'email' : null,
+                ].filter(Boolean) as string[],
+                createdAt: new Date().toISOString(),
+              };
+
+              pendingConflictsMap.set(conflict.id, conflict);
+              newConflicts.push(conflict);
+            } else {
+              const fields: string[] = [];
+              const values: any[] = [];
+              if (data.first_name) { fields.push('first_name = ?'); values.push(data.first_name); }
+              if (data.last_name) { fields.push('last_name = ?'); values.push(data.last_name); }
+              if (data.phone !== undefined) { fields.push('phone = ?'); values.push(data.phone); }
+              if (data.email !== undefined) { fields.push('email = ?'); values.push(data.email); }
+              if (data.dni !== undefined) { fields.push('dni = ?'); values.push(data.dni); }
+              if (data.notes !== undefined) { fields.push('notes = ?'); values.push(data.notes); }
+              fields.push('updated_at = ?');
+              values.push(new Date().toISOString());
+              values.push(entityId);
+              db.prepare(`UPDATE clients SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+              processedIds.push(id);
+            }
+          } else {
+            processedIds.push(id);
           }
+        }
+      }
+
+      // 3. GESTIÓN DE PRECIOS Y SUB-TRATAMIENTOS
+      else if (entity === 'sub_treatment' || entity === 'price') {
+        if (action === 'update' || action === 'update_price') {
+          const current: any = db.prepare('SELECT * FROM sub_treatments WHERE id = ?').get(entityId);
+          if (current) {
+            const serverUpdated = new Date(current.updated_at || current.created_at || '2026-01-01').getTime();
+            const clientSynced = lastSyncedAt ? new Date(lastSyncedAt).getTime() : 0;
+
+            const hasDiverged =
+              (data.price !== undefined && Number(data.price) !== Number(current.price)) ||
+              (data.name && data.name !== current.name) ||
+              (data.duration_minutes !== undefined && Number(data.duration_minutes) !== Number(current.duration_minutes));
+
+            if (serverUpdated > clientSynced && hasDiverged) {
+              const conflict: PendingConflict = {
+                id: `conflict-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                mutationId: id,
+                entity: 'sub_treatment',
+                entityId,
+                entityDescription: `Servicio / Precio: ${current.name}`,
+                mobileData: { ...current, ...data, clientTimestamp },
+                serverData: current,
+                diffFields: [
+                  data.price !== current.price ? 'price' : null,
+                  data.name !== current.name ? 'name' : null,
+                  data.duration_minutes !== current.duration_minutes ? 'duration_minutes' : null,
+                ].filter(Boolean) as string[],
+                createdAt: new Date().toISOString(),
+              };
+
+              pendingConflictsMap.set(conflict.id, conflict);
+              newConflicts.push(conflict);
+            } else {
+              const fields: string[] = [];
+              const values: any[] = [];
+              if (data.price !== undefined) { fields.push('price = ?'); values.push(data.price); }
+              if (data.name) { fields.push('name = ?'); values.push(data.name); }
+              if (data.duration_minutes !== undefined) { fields.push('duration_minutes = ?'); values.push(data.duration_minutes); }
+              if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
+              fields.push('updated_at = ?');
+              values.push(new Date().toISOString());
+              values.push(entityId);
+              db.prepare(`UPDATE sub_treatments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+              processedIds.push(id);
+            }
+          } else {
+            processedIds.push(id);
+          }
+        } else if (action === 'create') {
+          const existing = db.prepare('SELECT id FROM sub_treatments WHERE id = ?').get(entityId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO sub_treatments (
+                id, treatment_id, name, description, duration_minutes, price, is_active, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            `).run(
+              entityId,
+              data.treatment_id,
+              data.name,
+              data.description || null,
+              data.duration_minutes || 60,
+              data.price || 0,
+              data.created_at || new Date().toISOString(),
+              data.updated_at || new Date().toISOString()
+            );
+          }
+          processedIds.push(id);
+        }
+      }
+
+      // 4. GESTIÓN DE TRATAMIENTOS / CATEGORÍAS
+      else if (entity === 'treatment') {
+        if (action === 'create') {
+          const existing = db.prepare('SELECT id FROM treatments WHERE id = ?').get(entityId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO treatments (id, name, description, color_code, is_active, created_at, updated_at)
+              VALUES (?, ?, ?, ?, 1, ?, ?)
+            `).run(
+              entityId,
+              data.name,
+              data.description || null,
+              data.color_code || '#D4AF37',
+              data.created_at || new Date().toISOString(),
+              data.updated_at || new Date().toISOString()
+            );
+          }
+          processedIds.push(id);
+        } else if (action === 'update') {
+          const fields: string[] = [];
+          const values: any[] = [];
+          if (data.name) { fields.push('name = ?'); values.push(data.name); }
+          if (data.description !== undefined) { fields.push('description = ?'); values.push(data.description); }
+          if (data.color_code) { fields.push('color_code = ?'); values.push(data.color_code); }
+          fields.push('updated_at = ?');
+          values.push(new Date().toISOString());
+          values.push(entityId);
+          db.prepare(`UPDATE treatments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
           processedIds.push(id);
         }
       }
@@ -238,28 +482,51 @@ syncRouter.post('/batch', (req, res) => {
 
   try {
     executeBatch();
+
+    // Notificar al servidor central de cualquier conflicto nuevo para que el operador los confirme
+    if (newConflicts.length > 0) {
+      io.emit('sync:conflict-detected', {
+        conflicts: Array.from(pendingConflictsMap.values()),
+        newConflicts,
+      });
+    }
+
+    // Emitir refresco de datos en tiempo real
     io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
+
     res.json({
       success: true,
       processedIds,
-      conflicts,
+      conflicts: newConflicts,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// POST /api/sync/resolve-conflict - Resuelve una discrepancia según la elección del operador
+// POST /api/sync/resolve-conflict - Resuelve una discrepancia según la elección del operador en el servidor
 syncRouter.post('/resolve-conflict', (req, res) => {
-  const { entity, entityId, resolution, chosenData } = req.body;
+  const { conflictId, entity, entityId, resolution, chosenData } = req.body;
 
   try {
-    if (resolution === 'use_server') {
-      // El operador decidió conservar lo que está en la computadora, no se altera el servidor
-      io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
-      return res.json({ success: true, message: 'Datos del servidor conservados correctamente.' });
+    // Si viene conflictId, removerlo de la lista pendiente del servidor
+    if (conflictId && pendingConflictsMap.has(conflictId)) {
+      pendingConflictsMap.delete(conflictId);
     }
 
+    if (resolution === 'use_server') {
+      // El operador en la computadora decidió conservar los datos locales de la PC
+      io.emit('sync:conflict-resolved', {
+        conflictId,
+        entity,
+        entityId,
+        resolution: 'use_server',
+      });
+      io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
+      return res.json({ success: true, message: 'Datos de la computadora conservados correctamente.' });
+    }
+
+    // El operador en la computadora autorizó aplicar los cambios que envió el móvil
     if (entity === 'appointment' && chosenData) {
       db.prepare(`
         UPDATE appointments SET
@@ -268,6 +535,8 @@ syncRouter.post('/resolve-conflict', (req, res) => {
           staff_id = COALESCE(?, staff_id),
           box_id = COALESCE(?, box_id),
           status = COALESCE(?, status),
+          service_price = COALESCE(?, service_price),
+          deposit_amount = COALESCE(?, deposit_amount),
           notes = COALESCE(?, notes),
           updated_at = ?
         WHERE id = ?
@@ -277,6 +546,8 @@ syncRouter.post('/resolve-conflict', (req, res) => {
         chosenData.staff_id || null,
         chosenData.box_id || null,
         chosenData.status || null,
+        chosenData.service_price !== undefined ? chosenData.service_price : null,
+        chosenData.deposit_amount !== undefined ? chosenData.deposit_amount : null,
         chosenData.notes !== undefined ? chosenData.notes : null,
         new Date().toISOString(),
         entityId
@@ -300,10 +571,33 @@ syncRouter.post('/resolve-conflict', (req, res) => {
         new Date().toISOString(),
         entityId
       );
+    } else if ((entity === 'sub_treatment' || entity === 'price') && chosenData) {
+      db.prepare(`
+        UPDATE sub_treatments SET
+          price = COALESCE(?, price),
+          name = COALESCE(?, name),
+          duration_minutes = COALESCE(?, duration_minutes),
+          updated_at = ?
+        WHERE id = ?
+      `).run(
+        chosenData.price !== undefined ? chosenData.price : null,
+        chosenData.name || null,
+        chosenData.duration_minutes !== undefined ? chosenData.duration_minutes : null,
+        new Date().toISOString(),
+        entityId
+      );
     }
 
+    io.emit('sync:conflict-resolved', {
+      conflictId,
+      entity,
+      entityId,
+      resolution: 'use_mobile',
+      chosenData,
+    });
     io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
-    res.json({ success: true, message: 'Discrepancia resuelta y sincronizada.' });
+
+    res.json({ success: true, message: 'Discrepancia confirmada y aplicada en el servidor.' });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

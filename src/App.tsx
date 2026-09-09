@@ -28,6 +28,7 @@ import { MobileAppView } from './components/mobile/MobileAppView';
 import { MobileQrModal } from './components/mobile/MobileQrModal';
 import { ConflictResolutionModal } from './components/mobile/ConflictResolutionModal';
 import { syncService, SyncConflict } from './services/syncService';
+import { getSocket } from './services/socket';
 
 export const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
@@ -47,12 +48,36 @@ export const App: React.FC = () => {
 
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
 
-  // Escuchar conflictos detectados durante la sincronización
+  // Escuchar y gestionar confirmación de conflictos en el servidor central
   useEffect(() => {
+    // 1. Suscripción local
     const unsub = syncService.onConflict((c) => {
       setConflicts(c);
     });
-    return unsub;
+
+    // 2. Carga inicial de conflictos pendientes en el servidor
+    fetch('/api/sync/pending-conflicts')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.conflicts)) {
+          setConflicts(data.conflicts);
+        }
+      })
+      .catch(() => {});
+
+    // 3. Socket.IO en tiempo real
+    const socket = getSocket();
+    const handleConflict = (payload: { conflicts: SyncConflict[] }) => {
+      if (payload?.conflicts) {
+        setConflicts(payload.conflicts);
+      }
+    };
+    socket.on('sync:conflict-detected', handleConflict);
+
+    return () => {
+      unsub();
+      socket.off('sync:conflict-detected', handleConflict);
+    };
   }, []);
 
   // Comprobación automática de versiones al iniciar

@@ -1,13 +1,15 @@
 import { offlineStorage, OfflineMutation } from './offlineStorage';
 
 export interface SyncConflict {
+  id?: string;
   mutationId: string;
-  entity: 'appointment' | 'client';
+  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
   entityId: string;
   entityDescription: string;
   mobileData: any;
   serverData: any;
   diffFields: string[];
+  createdAt?: string;
 }
 
 type SyncListener = (status: {
@@ -101,6 +103,16 @@ class SyncService {
 
       if (res.ok) {
         this.isOnline = true;
+        // Consultar si hay conflictos pendientes de revisión en el servidor
+        try {
+          const confRes = await fetch('/api/sync/pending-conflicts');
+          if (confRes.ok) {
+            const confData = await confRes.json();
+            if (confData.success && Array.isArray(confData.conflicts)) {
+              this.conflicts = confData.conflicts;
+            }
+          }
+        } catch {}
         await this.syncNow();
       } else {
         this.isOnline = false;
@@ -174,8 +186,8 @@ class SyncService {
 
   // Registrar acción offline y sincronizar si hay conexión
   public async recordOfflineAction(
-    entity: 'appointment' | 'client',
-    action: 'create' | 'update' | 'delete',
+    entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price',
+    action: 'create' | 'update' | 'delete' | 'update_price',
     entityId: string,
     data: any
   ) {
@@ -210,6 +222,7 @@ class SyncService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          conflictId: conflict.id,
           entity: conflict.entity,
           entityId: conflict.entityId,
           resolution,
@@ -219,7 +232,7 @@ class SyncService {
 
       if (res.ok) {
         // Remover de la lista local de conflictos
-        this.conflicts = this.conflicts.filter((c) => c.mutationId !== conflict.mutationId);
+        this.conflicts = this.conflicts.filter((c) => c.mutationId !== conflict.mutationId && c.id !== conflict.id);
         await offlineStorage.removeProcessedMutations([conflict.mutationId]);
         this.notify();
         await this.syncNow();

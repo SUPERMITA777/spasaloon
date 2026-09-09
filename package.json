@@ -1,6 +1,6 @@
 {
   "name": "hikari-suite-gestion",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Hikari Suite — Sistema Integral de Gestión para Centros de Salud, Estética, Spas y Salones",
   "main": "dist-electron/main.cjs",
   "type": "module",
@@ -42,11 +42,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -61,11 +65,15 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Office",
@@ -81,6 +89,7 @@
     "express": "^4.21.2",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.2",
+    "localtunnel": "^2.0.2",
     "lucide-react": "^0.475.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
@@ -95,6 +104,7 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/localtunnel": "^2.0.4",
     "@types/node": "^22.13.1",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.18",
@@ -105,7 +115,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^34.1.1",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "postcss": "^8.5.2",
     "tailwindcss": "^3.4.17",

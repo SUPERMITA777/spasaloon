@@ -1,7 +1,7 @@
-﻿export interface OfflineMutation {
+export interface OfflineMutation {
   id: string;
-  entity: 'appointment' | 'client';
-  action: 'create' | 'update' | 'delete';
+  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
+  action: 'create' | 'update' | 'delete' | 'update_price';
   entityId: string;
   data: any;
   clientTimestamp: string;
