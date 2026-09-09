@@ -1,11 +1,11 @@
 /**
  * REGLA DE VERSIONADO CONTINUO DE HIKARI SUITE
  * 
- * Versión actual: 1.0.7
+ * Versión actual: 1.0.8
  * Cada cambio, corrección o nueva funcionalidad que se realice de ahora en más
  * DEBE sumar 0.0.1 a la versión actual tanto en este archivo como en package.json.
  */
-export const APP_VERSION = '1.0.7';
+export const APP_VERSION = '1.0.8';
 export const APP_NAME = 'Hikari Suite';
 export const APP_TAGLINE = 'Sistema Integral de Gestión';
 export const APP_SUBTITLE = 'Estética, Salud, Bienestar & Salones';

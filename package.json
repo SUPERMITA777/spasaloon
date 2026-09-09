@@ -1,6 +1,6 @@
 {
   "name": "hikari-suite-gestion",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Hikari Suite — Sistema Integral de Gestión para Centros de Salud, Estética, Spas y Salones",
   "main": "dist-electron/main.cjs",
   "type": "module",

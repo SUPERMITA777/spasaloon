@@ -22,6 +22,7 @@ import { cashRouter } from './routes/cash.js';
 import { marketingRouter } from './routes/marketing.js';
 import { backupRouter } from './routes/backup.js';
 import { updaterRouter } from './routes/updater.js';
+import { syncRouter } from './routes/sync.js';
 import { getBackupConfig, createBackup } from './services/backup.js';
 
 export const app = express();
@@ -58,6 +59,7 @@ app.use('/api/cash', cashRouter);
 app.use('/api/marketing', marketingRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/system', updaterRouter);
+app.use('/api/sync', syncRouter);
 
 // Ruta para cierre ordenado del sistema con backup
 app.post('/api/system/shutdown', async (req, res) => {

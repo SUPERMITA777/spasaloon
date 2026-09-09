@@ -48,6 +48,8 @@ interface AppContextType {
   setIsNewAppointmentOpen: (open: boolean) => void;
   isStaffQrModalOpen: boolean;
   setIsStaffQrModalOpen: (open: boolean) => void;
+  isMobileQrModalOpen: boolean;
+  setIsMobileQrModalOpen: (open: boolean) => void;
   closeSystem: () => Promise<void>;
 }
 
@@ -75,6 +77,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState<boolean>(false);
   const [isStaffQrModalOpen, setIsStaffQrModalOpen] = useState<boolean>(false);
+  const [isMobileQrModalOpen, setIsMobileQrModalOpen] = useState<boolean>(false);
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -219,6 +222,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsNewAppointmentOpen,
         isStaffQrModalOpen,
         setIsStaffQrModalOpen,
+        isMobileQrModalOpen,
+        setIsMobileQrModalOpen,
         closeSystem,
       }}
     >

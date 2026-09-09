@@ -19,12 +19,15 @@ import { MarketingView } from './components/marketing/MarketingView';
 import { UserGuideView } from './components/guide/UserGuideView';
 import { BackupSettingsView } from './components/settings/BackupSettingsView';
 
-// Modales Globales
 import { AppointmentModal } from './components/agenda/AppointmentModal';
 import { NewAppointmentModal } from './components/agenda/NewAppointmentModal';
 import { StaffQrModal } from './components/staff/StaffQrModal';
 import { StaffMobilePortal } from './components/staffPortal/StaffMobilePortal';
 import { ClientMobileConsentPortal } from './components/consents/ClientMobileConsentPortal';
+import { MobileAppView } from './components/mobile/MobileAppView';
+import { MobileQrModal } from './components/mobile/MobileQrModal';
+import { ConflictResolutionModal } from './components/mobile/ConflictResolutionModal';
+import { syncService, SyncConflict } from './services/syncService';
 
 export const App: React.FC = () => {
   const [showSplash, setShowSplash] = useState(true);
@@ -37,8 +40,20 @@ export const App: React.FC = () => {
     setSelectedAppointment,
     isNewAppointmentOpen,
     setIsNewAppointmentOpen,
+    isMobileQrModalOpen,
+    setIsMobileQrModalOpen,
     addToast,
   } = useApp();
+
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+
+  // Escuchar conflictos detectados durante la sincronización
+  useEffect(() => {
+    const unsub = syncService.onConflict((c) => {
+      setConflicts(c);
+    });
+    return unsub;
+  }, []);
 
   // Comprobación automática de versiones al iniciar
   useEffect(() => {
@@ -84,6 +99,16 @@ export const App: React.FC = () => {
   const isConsentRoute = window.location.pathname.startsWith('/consent');
   if (isConsentRoute) {
     return <ClientMobileConsentPortal />;
+  }
+
+  // Si estamos en la ruta móvil de la App sincronizable (/mobile o ?mode=mobile o #mobile)
+  const isMobileRoute =
+    window.location.pathname.startsWith('/mobile') ||
+    new URLSearchParams(window.location.search).get('mode') === 'mobile' ||
+    window.location.hash === '#mobile';
+
+  if (isMobileRoute) {
+    return <MobileAppView />;
   }
 
   // Si estamos en la ruta móvil del profesional (/staff o ?token=...)
@@ -149,6 +174,14 @@ export const App: React.FC = () => {
       )}
 
       <StaffQrModal />
+      <MobileQrModal
+        isOpen={isMobileQrModalOpen}
+        onClose={() => setIsMobileQrModalOpen(false)}
+      />
+      <ConflictResolutionModal
+        conflicts={conflicts}
+        onClose={() => setConflicts([])}
+      />
       <ToastContainer />
 
       {/* Modal de Actualización Disponible */}

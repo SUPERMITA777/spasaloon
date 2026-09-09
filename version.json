@@ -1,9 +1,9 @@
 {
-  "version": "1.0.7",
+  "version": "1.0.8",
   "appName": "Hikari Suite",
   "releaseDate": "2026-09-09",
   "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
-  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.7/Hikari.Suite.Setup.1.0.7.exe",
-  "installerFileName": "Hikari Suite Setup 1.0.7.exe",
-  "changelog": "Detección precisa de versión en producción, resuelto bug de versión fija 1.0.4, agenda Excel, cobro de señas y recargos por tarjeta en caja."
+  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.8/Hikari.Suite.Setup.1.0.8.exe",
+  "installerFileName": "Hikari Suite Setup 1.0.8.exe",
+  "changelog": "App móvil para iPhone y Android (PWA vía QR), modo offline con almacenamiento local y resolución visual de discrepancias."
 }

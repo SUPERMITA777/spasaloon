@@ -1,0 +1,22 @@
+﻿<svg width="192" height="192" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hikariCopperLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#F5DFD0" />
+      <stop offset="35%" stopColor="#D9A88F" />
+      <stop offset="70%" stopColor="#BA7B5D" />
+      <stop offset="100%" stopColor="#8A4E36" />
+    </linearGradient>
+    <linearGradient id="hikariGoldAccent" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#8A4E36" />
+      <stop offset="50%" stopColor="#C99073" />
+      <stop offset="100%" stopColor="#F5DFD0" />
+    </linearGradient>
+  </defs>
+  <rect width="160" height="160" rx="36" fill="#FAF5EE"/>
+  <path d="M 28 26 L 60 26 C 54 30 50 34 50 42 L 50 118 C 50 126 54 130 60 134 L 28 134 C 34 130 38 126 38 118 L 38 42 C 38 34 34 30 28 26 Z" fill="url(#hikariCopperLight)"/>
+  <path d="M 132 26 L 100 26 C 106 30 110 34 110 42 L 110 118 C 110 126 106 130 100 134 L 132 134 C 126 130 122 126 122 118 L 122 42 C 122 34 126 30 132 26 Z" fill="url(#hikariCopperLight)"/>
+  <rect x="38" y="74" width="84" height="12" fill="url(#hikariCopperLight)"/>
+  <path d="M 80 50 C 76 64 72 74 80 84 C 88 74 84 64 80 50 Z" fill="url(#hikariGoldAccent)"/>
+  <path d="M 78 56 C 70 66 68 76 77 82 C 77 74 74 66 78 56 Z" fill="url(#hikariCopperLight)"/>
+  <path d="M 82 56 C 90 66 92 76 83 82 C 83 74 86 66 82 56 Z" fill="url(#hikariCopperLight)"/>
+</svg>

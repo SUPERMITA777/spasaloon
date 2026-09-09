@@ -10,6 +10,7 @@ import {
   Sparkles,
   Wifi,
   Smartphone,
+  QrCode,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -20,6 +21,7 @@ export const Header: React.FC = () => {
     activeShift,
     networkInfo,
     setIsStaffQrModalOpen,
+    setIsMobileQrModalOpen,
   } = useApp();
 
   // Cambiar fecha
@@ -104,13 +106,24 @@ export const Header: React.FC = () => {
         {networkInfo && (
           <button
             onClick={() => setIsStaffQrModalOpen(true)}
-            className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs bg-rose-gold-50 text-rose-gold-700 border border-rose-gold-200 hover:bg-rose-gold-100 transition-colors"
-            title="Ver códigos QR para celulares del personal"
+            className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs bg-rose-gold-50 text-rose-gold-700 border border-rose-gold-200 hover:bg-rose-gold-100 transition-colors"
+            title="Ver portal de turnos para el personal"
           >
             <Smartphone className="w-3.5 h-3.5 text-rose-gold-600" />
-            <span className="font-semibold">QR Wi-Fi:</span> {networkInfo.localIp}:3100
+            <span className="font-semibold">Portal Personal</span>
           </button>
         )}
+
+        {/* Mobile App Sync & QR Button */}
+        <button
+          onClick={() => setIsMobileQrModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs bg-rose-blush-50 hover:bg-rose-blush-100 text-rose-gold-800 border border-rose-gold-200 transition-all duration-150 font-medium shadow-sm hover:scale-[1.02]"
+          title="Descargar/Vincular App Móvil iPhone y Android con sincronización offline"
+        >
+          <QrCode className="w-3.5 h-3.5 text-rose-gold-600" />
+          <span className="font-semibold hidden sm:inline">📲 App Móvil</span>
+          <span className="text-[10px] bg-rose-gold-500 text-white px-1.5 py-0.2 rounded-full font-bold">Offline</span>
+        </button>
 
         {/* New Appointment Primary Button */}
         <button
