@@ -77,7 +77,11 @@ syncRouter.post('/toggle-remote-tunnel', async (req, res) => {
 
     if (activeTunnel) {
       try {
-        activeTunnel.close();
+        if (typeof activeTunnel.stop === 'function') {
+          activeTunnel.stop();
+        } else if (typeof activeTunnel.close === 'function') {
+          activeTunnel.close();
+        }
       } catch {}
       activeTunnel = null;
       activeTunnelUrl = null;
@@ -85,17 +89,57 @@ syncRouter.post('/toggle-remote-tunnel', async (req, res) => {
       return res.json({ success: true, isTunnelActive: false, message: 'Túnel a distancia desconectado.' });
     }
 
-    // Iniciar nuevo túnel seguro localtunnel
-    const localtunnel = (await import('localtunnel')).default;
-    const tunnel = await localtunnel({ port });
-    activeTunnel = tunnel;
-    activeTunnelUrl = tunnel.url;
+    let url: string | null = null;
+    let tunnelInstance: any = null;
 
-    tunnel.on('close', () => {
-      activeTunnel = null;
-      activeTunnelUrl = null;
-      io.emit('sync:tunnel-status', { isTunnelActive: false, remoteMobileUrl: null });
-    });
+    // 1. Prioridad: Cloudflare Quick Tunnel (sin pantallas de advertencia/IP de loca.lt, HTTPS nativo y validado)
+    try {
+      const { Tunnel } = await import('cloudflared');
+      const cfTunnel = Tunnel.quick(`http://localhost:${port}`);
+
+      url = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Cloudflare tunnel timeout (12s)'));
+        }, 12000);
+
+        cfTunnel.once('url', (tunnelUrl: string) => {
+          clearTimeout(timeout);
+          resolve(tunnelUrl);
+        });
+
+        cfTunnel.once('error', (err: any) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+
+        cfTunnel.once('exit', (code: any) => {
+          clearTimeout(timeout);
+          if (!url) reject(new Error(`Cloudflare tunnel cerró con código ${code}`));
+        });
+      });
+
+      tunnelInstance = cfTunnel;
+      cfTunnel.on('exit', () => {
+        activeTunnel = null;
+        activeTunnelUrl = null;
+        io.emit('sync:tunnel-status', { isTunnelActive: false, remoteMobileUrl: null });
+      });
+    } catch (cfErr) {
+      console.warn('Cloudflare tunnel falló o tardó demasiado, usando fallback localtunnel:', cfErr);
+      const localtunnel = (await import('localtunnel')).default;
+      const ltTunnel = await localtunnel({ port });
+      url = ltTunnel.url;
+      tunnelInstance = ltTunnel;
+
+      ltTunnel.on('close', () => {
+        activeTunnel = null;
+        activeTunnelUrl = null;
+        io.emit('sync:tunnel-status', { isTunnelActive: false, remoteMobileUrl: null });
+      });
+    }
+
+    activeTunnel = tunnelInstance;
+    activeTunnelUrl = url;
 
     const remoteQrCodeDataUrl = await QRCode.toDataURL(`${activeTunnelUrl}/mobile`, {
       width: 320,

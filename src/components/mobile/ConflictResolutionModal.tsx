@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SyncConflict, syncService } from '../../services/syncService';
 import {
   AlertTriangle,
@@ -59,8 +60,8 @@ export const ConflictResolutionModal: React.FC<Props> = ({ conflicts, onClose })
     return current.diffFields?.includes(field);
   };
 
-  return (
-    <div className="fixed inset-0 z-70 bg-graphite-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] bg-graphite-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
       <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border-2 border-amber-400 overflow-hidden animate-scale-up flex flex-col my-6 text-xs">
         {/* Header con advertencia */}
         <div className="p-4 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white flex items-center justify-between">
@@ -258,6 +259,7 @@ export const ConflictResolutionModal: React.FC<Props> = ({ conflicts, onClose })
           <span>* La opción elegida en este servidor se guardará en SQLite y se transmitirá a la app móvil automáticamente.</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

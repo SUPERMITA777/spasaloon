@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   QrCode,
@@ -23,7 +24,7 @@ interface Props {
 export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [tunnelLoading, setTunnelLoading] = useState<boolean>(false);
-  const [connectionMode, setConnectionMode] = useState<'remote' | 'local'>('remote');
+  const [connectionMode, setConnectionMode] = useState<'local' | 'remote'>('local');
   const [platformTab, setPlatformTab] = useState<'ios' | 'android'>('ios');
   const [copied, setCopied] = useState<boolean>(false);
 
@@ -83,12 +84,12 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   const activeUrl =
     connectionMode === 'remote'
-      ? info?.remoteMobileUrl || info?.localMobileUrl
-      : info?.localMobileUrl;
+      ? info?.remoteMobileUrl || ''
+      : info?.localMobileUrl || '';
 
   const activeQr =
     connectionMode === 'remote'
-      ? info?.remoteQrCodeDataUrl || info?.localQrCodeDataUrl
+      ? info?.remoteQrCodeDataUrl
       : info?.localQrCodeDataUrl;
 
   const handleCopy = () => {
@@ -101,9 +102,17 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-60 bg-graphite-950/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col my-4 text-xs">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[99999] bg-graphite-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col my-4 text-xs relative z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-5 bg-gradient-to-r from-rose-gold-700 via-rose-gold-600 to-rose-gold-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -133,8 +142,20 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto max-h-[82vh] bg-silk-50/40">
-          {/* Selector de Modo de Conexión: Remoto por Internet vs Mismo Wi-Fi */}
+          {/* Selector de Modo de Conexión: Mismo Wi-Fi vs Remoto por Internet */}
           <div className="p-1.5 bg-silk-200 rounded-2xl border border-rose-gold-200 flex gap-1 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setConnectionMode('local')}
+              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-xs ${
+                connectionMode === 'local'
+                  ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-md'
+                  : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
+              }`}
+            >
+              <Wifi className="w-4 h-4 shrink-0" />
+              <span>Mismo Wi-Fi Local (Recomendado)</span>
+            </button>
             <button
               type="button"
               onClick={() => setConnectionMode('remote')}
@@ -147,42 +168,51 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <Globe className="w-4 h-4 shrink-0" />
               <span>A Distancia (Internet / 4G / 5G)</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setConnectionMode('local')}
-              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-xs ${
-                connectionMode === 'local'
-                  ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-md'
-                  : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
-              }`}
-            >
-              <Wifi className="w-4 h-4 shrink-0" />
-              <span>Mismo Wi-Fi Local</span>
-            </button>
           </div>
 
-          {/* Banner de Estado del Túnel a Distancia */}
+          {/* Banner explicativo del modo Wi-Fi Local */}
+          {connectionMode === 'local' && (
+            <div className="p-3 bg-silk-100 rounded-2xl border border-rose-gold-200 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <div>
+                  <div className="font-bold text-graphite-800 text-[11px]">
+                    Conexión Directa en Red Local
+                  </div>
+                  <p className="text-[10px] text-graphite-500">
+                    Asegúrate de que tu celular esté conectado a la misma red Wi-Fi ({info?.localIp || 'Cargando IP...'}). No requiere internet exterior y abre de forma instantánea.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Banner de Estado del Túnel a Distancia Cloudflare */}
           {connectionMode === 'remote' && (
             <div className="p-3 bg-rose-blush-50 rounded-2xl border border-rose-blush-200 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    info?.isTunnelActive ? 'bg-emerald-500 animate-pulse' : 'bg-graphite-300'
+                  className={`w-3 h-3 rounded-full shrink-0 ${
+                    info?.isTunnelActive ? 'bg-emerald-500 animate-pulse' : 'bg-graphite-400'
                   }`}
                 />
                 <div>
                   <div className="font-bold text-graphite-800 text-[11px] flex items-center gap-1.5">
-                    <span>Conexión a Distancia Segura (HTTPS)</span>
-                    {info?.isTunnelActive && (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-mono">
-                        ACTIVO
+                    <span>Conexión Cloudflare HTTPS Directa</span>
+                    {info?.isTunnelActive ? (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-mono font-bold">
+                        EN LÍNEA
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-graphite-200 text-graphite-700 px-1.5 py-0.2 rounded font-mono">
+                        INACTIVO
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-graphite-500">
                     {info?.isTunnelActive
-                      ? 'Túnel en línea: Puedes controlar el salón desde cualquier teléfono celular fuera del local.'
-                      : 'Activa la conexión remota para generar una dirección web pública y segura.'}
+                      ? 'Túnel activo sin pantallas de bloqueo. Abre directamente en Safari y Chrome.'
+                      : 'Activa la conexión remota para generar una dirección segura accesible desde 4G/5G.'}
                   </p>
                 </div>
               </div>
@@ -219,7 +249,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <QrCode className="w-4 h-4 text-rose-gold-600" />
               <span>
                 {connectionMode === 'remote'
-                  ? 'Escanea para Conectar a Distancia'
+                  ? 'Escanea para Conectar a Distancia (4G / 5G)'
                   : 'Escanea conectado al Wi-Fi del Salón'}
               </span>
             </div>
@@ -228,8 +258,27 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               <div className="w-56 h-56 flex flex-col items-center justify-center gap-2 bg-silk-100 rounded-2xl border border-rose-gold-200">
                 <RefreshCw className="w-7 h-7 animate-spin text-rose-gold-500" />
                 <span className="text-graphite-600 text-xs font-medium">
-                  {tunnelLoading ? 'Estableciendo enlace seguro...' : 'Generando QR...'}
+                  {tunnelLoading ? 'Iniciando enlace Cloudflare...' : 'Generando QR...'}
                 </span>
+              </div>
+            ) : connectionMode === 'remote' && !info?.isTunnelActive ? (
+              <div className="w-64 h-64 p-5 flex flex-col items-center justify-center text-center gap-3 bg-silk-100/70 rounded-2xl border-2 border-dashed border-rose-gold-300">
+                <Globe className="w-10 h-10 text-rose-gold-500/80" />
+                <div>
+                  <h4 className="font-bold text-graphite-800 text-xs">Túnel a Distancia Inactivo</h4>
+                  <p className="text-[10px] text-graphite-500 mt-1 leading-relaxed">
+                    Activa la conexión para generar un enlace HTTPS seguro de Cloudflare sin pantallas de verificación.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleRemoteTunnel}
+                  disabled={tunnelLoading}
+                  className="mt-1 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white font-bold text-xs shadow-md hover:from-rose-gold-700 hover:to-rose-gold-800 flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Activar Conexión Cloudflare</span>
+                </button>
               </div>
             ) : activeQr ? (
               <div className="p-3.5 bg-white rounded-2xl border-2 border-rose-gold-400/80 shadow-md">
@@ -241,28 +290,28 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
             ) : (
               <div className="p-8 text-rose-600 font-semibold text-xs">
-                No se pudo generar el código QR. Pulsa Activar Túnel arriba.
+                No se pudo generar el código QR.
               </div>
             )}
 
             {/* Enlace y botón copiar */}
-            <div className="w-full max-w-sm pt-1">
-              <div className="flex items-center gap-1.5 p-1.5 bg-silk-100 rounded-xl border border-rose-gold-200">
-                <input
-                  type="text"
-                  readOnly
-                  value={activeUrl || 'Cargando enlace...'}
-                  className="flex-1 bg-transparent px-2 text-[11px] font-mono text-graphite-700 outline-none truncate"
-                />
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-gold-50 border border-rose-gold-200 text-rose-gold-800 font-bold text-[11px] transition-all flex items-center gap-1 shadow-xs"
-                >
-                  {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copied ? 'Copiado' : 'Copiar'}</span>
-                </button>
-                {activeUrl && (
+            {activeUrl && (
+              <div className="w-full max-w-sm pt-1">
+                <div className="flex items-center gap-1.5 p-1.5 bg-silk-100 rounded-xl border border-rose-gold-200">
+                  <input
+                    type="text"
+                    readOnly
+                    value={activeUrl}
+                    className="flex-1 bg-transparent px-2 text-[11px] font-mono text-graphite-700 outline-none truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-rose-gold-50 border border-rose-gold-200 text-rose-gold-800 font-bold text-[11px] transition-all flex items-center gap-1 shadow-xs"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    <span>{copied ? 'Copiado' : 'Copiar'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => window.open(activeUrl, '_blank')}
@@ -271,9 +320,9 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Selector de Plataforma: iOS vs Android */}
@@ -308,7 +357,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               {platformTab === 'ios' ? (
                 <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed">
                   <li>Apunta la <strong>Cámara de tu iPhone</strong> hacia el código QR de arriba.</li>
-                  <li>Toca el aviso emergente para abrir el enlace en <strong>Safari</strong>.</li>
+                  <li>Toca el aviso emergente para abrir el enlace en <strong>Safari</strong> (abre directo, sin pantallas de bloqueo).</li>
                   <li>En la barra inferior de Safari, toca el botón de <strong>Compartir</strong> (icono de cuadrado con flecha ⎋).</li>
                   <li>Selecciona <strong>"Agregar a Inicio" (➕)</strong>.</li>
                   <li>¡Listo! La aplicación se instalará en tu pantalla con su icono oficial de Hikari Suite.</li>
@@ -316,7 +365,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               ) : (
                 <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed">
                   <li>Abre la <strong>Cámara</strong> o Google Lens y escanea el código QR de arriba.</li>
-                  <li>Abre el enlace en tu navegador <strong>Google Chrome</strong>.</li>
+                  <li>Abre el enlace en tu navegador <strong>Google Chrome</strong> (abre directo, sin verificaciones de IP).</li>
                   <li>Pulsa sobre el botón <strong>"Instalar Hikari Suite"</strong> que aparecerá en pantalla.</li>
                   <li>Si no aparece automáticamente, toca los <strong>3 puntos (⋮)</strong> arriba a la derecha y selecciona <strong>"Instalar aplicación"</strong> o <strong>"Agregar a pantalla principal"</strong>.</li>
                   <li>¡Listo! Podrás acceder a la app desde tu pantalla de inicio como una app nativa.</li>
@@ -355,8 +404,8 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <Globe className="w-3.5 h-3.5 text-rose-gold-600" />
             <span>
               {connectionMode === 'remote'
-                ? 'Modo a distancia: funciona desde cualquier lugar con datos móviles.'
-                : 'Modo Wi-Fi: requiere estar conectado al mismo router del salón.'}
+                ? 'Modo a distancia: enlace seguro Cloudflare HTTPS para usar desde 4G/5G.'
+                : 'Modo Wi-Fi Local: conexión directa al servidor en el salón sin usar internet.'}
             </span>
           </div>
           <button
@@ -368,6 +417,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -1,9 +1,9 @@
 {
-  "version": "1.0.10",
+  "version": "1.0.11",
   "appName": "Hikari Suite",
   "releaseDate": "2026-09-09",
   "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
-  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.10/Hikari.Suite.Setup.1.0.10.exe",
-  "installerFileName": "Hikari Suite Setup 1.0.10.exe",
-  "changelog": "Integración de capa de trabajo ECC (Engineering Control Center) para Antigravity: agents, rules y workflows de ingeniería."
+  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.11/Hikari.Suite.Setup.1.0.11.exe",
+  "installerFileName": "Hikari Suite Setup 1.0.11.exe",
+  "changelog": "Corrección de superposición visual de modal sobre la agenda (portal z-[99999]) y reemplazo de túnel por Cloudflare Quick Tunnel directo sin páginas de advertencia ni solicitud de IP."
 }
