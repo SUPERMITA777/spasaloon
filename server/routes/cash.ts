@@ -24,16 +24,28 @@ cashRouter.get('/current-shift', (req, res) => {
       LEFT JOIN clients c ON ct.client_id = c.id
       WHERE ct.shift_id = ? AND ct.deleted_at IS NULL
       ORDER BY ct.created_at DESC
-    `).all(shift.id);
+    `).all(shift.id) as any[];
 
     const total_incomes = transactions.filter((t: any) => t.type === 'income').reduce((acc: number, t: any) => acc + t.amount, 0);
     const total_expenses = transactions.filter((t: any) => t.type === 'expense').reduce((acc: number, t: any) => acc + t.amount, 0);
-    const expected_cash = shift.initial_cash + total_incomes - total_expenses;
+    
+    // Desglose por medios de pago
+    const cash_incomes = transactions.filter((t: any) => t.type === 'income' && t.payment_method === 'cash').reduce((acc: number, t: any) => acc + t.amount, 0);
+    const cash_expenses = transactions.filter((t: any) => t.type === 'expense' && t.payment_method === 'cash').reduce((acc: number, t: any) => acc + t.amount, 0);
+    const total_cash = shift.initial_cash + cash_incomes - cash_expenses;
+
+    const total_cards = transactions.filter((t: any) => t.type === 'income' && (t.payment_method === 'card_credit' || t.payment_method === 'card_debit')).reduce((acc: number, t: any) => acc + t.amount, 0);
+    const total_transfers = transactions.filter((t: any) => t.type === 'income' && (t.payment_method === 'transfer' || t.payment_method === 'qr_mercadopago')).reduce((acc: number, t: any) => acc + t.amount, 0);
+
+    const expected_cash = total_cash; // El dinero físico esperado en el cajón de efectivo
 
     res.json({
       ...shift,
       total_incomes,
       total_expenses,
+      total_cash,
+      total_cards,
+      total_transfers,
       expected_cash,
       transactions,
     });
@@ -95,7 +107,7 @@ cashRouter.post('/close-shift/:id', (req, res) => {
 // Registrar movimiento de ingreso o egreso
 cashRouter.post('/transactions', (req, res) => {
   try {
-    const { shift_id, appointment_id, client_id, type, category, amount, payment_method, notes } = req.body;
+    const { shift_id, appointment_id, client_id, type, category, amount, payment_method, card_brand, surcharge_percentage, notes } = req.body;
     const id = uuidv4();
     const now = new Date().toISOString();
 
@@ -116,12 +128,69 @@ cashRouter.post('/transactions', (req, res) => {
     }
 
     db.prepare(`
-      INSERT INTO cash_transactions (id, shift_id, appointment_id, client_id, type, category, amount, payment_method, notes, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, activeShiftId, appointment_id || null, client_id || null, type || 'income', category || 'General', amount || 0, payment_method || 'cash', notes || null, now, now);
+      INSERT INTO cash_transactions (id, shift_id, appointment_id, client_id, type, category, amount, payment_method, card_brand, surcharge_percentage, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      activeShiftId,
+      appointment_id || null,
+      client_id || null,
+      type || 'income',
+      category || 'General',
+      amount || 0,
+      payment_method || 'cash',
+      card_brand || null,
+      surcharge_percentage !== undefined ? surcharge_percentage : null,
+      notes || null,
+      now,
+      now
+    );
 
     const created = db.prepare(`SELECT * FROM cash_transactions WHERE id = ?`).get(id);
     res.status(201).json(created);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Obtener reglas de recargos / descuentos
+cashRouter.get('/payment-rules', (req, res) => {
+  try {
+    const row = db.prepare(`SELECT value FROM system_settings WHERE key = 'payment_surcharges_config'`).get() as any;
+    if (row && row.value) {
+      return res.json(JSON.parse(row.value));
+    }
+    // Reglas por defecto
+    const defaultRules = {
+      cash_discount_percent: 10,
+      debit_surcharge_percent: 0,
+      transfer_discount_percent: 0,
+      credit_default_surcharge_percent: 5,
+      card_rules: [
+        { id: '1', name: 'Mastercard', percentage: 5, is_active: true },
+        { id: '2', name: 'Visa Banco Nación', percentage: 3, is_active: true },
+        { id: '3', name: 'Visa General', percentage: 5, is_active: true },
+        { id: '4', name: 'American Express', percentage: 7, is_active: true },
+      ],
+    };
+    res.json(defaultRules);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Guardar reglas de recargos / descuentos
+cashRouter.post('/payment-rules', (req, res) => {
+  try {
+    const config = req.body;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ('payment_surcharges_config', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(JSON.stringify(config), now);
+
+    res.json({ success: true, config });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

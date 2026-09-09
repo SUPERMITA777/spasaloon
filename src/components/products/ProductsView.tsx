@@ -27,7 +27,14 @@ export const ProductsView: React.FC = () => {
   const { products, refreshAllData, addToast } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'sale' | 'supply' | 'low_stock'>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'spreadsheet'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'spreadsheet'>(() => {
+    return (localStorage.getItem('hikari_view_mode_products') as 'grid' | 'spreadsheet') || 'grid';
+  });
+
+  const handleSetViewMode = (mode: 'grid' | 'spreadsheet') => {
+    setViewMode(mode);
+    localStorage.setItem('hikari_view_mode_products', mode);
+  };
   const [isNewProductOpen, setIsNewProductOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedProductForStock, setSelectedProductForStock] = useState<Product | null>(null);
@@ -212,7 +219,7 @@ export const ProductsView: React.FC = () => {
           {/* Selector de Modo: Cuadrícula vs Planilla */}
           <div className="flex bg-white p-1 rounded-2xl border border-rose-gold-200 shadow-sm">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => handleSetViewMode('grid')}
               title="Vista de Tarjetas / Cuadrícula"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                 viewMode === 'grid'
@@ -224,7 +231,7 @@ export const ProductsView: React.FC = () => {
               <span className="hidden sm:inline">Tarjetas</span>
             </button>
             <button
-              onClick={() => setViewMode('spreadsheet')}
+              onClick={() => handleSetViewMode('spreadsheet')}
               title="Vista en Modo Planilla (Tabla interactiva)"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                 viewMode === 'spreadsheet'

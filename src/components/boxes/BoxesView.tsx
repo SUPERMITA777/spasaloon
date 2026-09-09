@@ -18,6 +18,8 @@ export const BoxesView: React.FC = () => {
   const [isPermanent, setIsPermanent] = useState(true);
   const [availableFrom, setAvailableFrom] = useState('');
   const [availableTo, setAvailableTo] = useState('');
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('21:00');
   const [loading, setLoading] = useState(false);
 
   const handleOpenCreate = () => {
@@ -30,6 +32,8 @@ export const BoxesView: React.FC = () => {
     setIsPermanent(true);
     setAvailableFrom(new Date().toISOString().split('T')[0]);
     setAvailableTo(new Date(Date.now() + 86400000 * 30).toISOString().split('T')[0]);
+    setStartTime('08:00');
+    setEndTime('21:00');
     setIsModalOpen(true);
   };
 
@@ -43,6 +47,8 @@ export const BoxesView: React.FC = () => {
     setIsPermanent(!box.is_temporary);
     setAvailableFrom(box.available_from ? box.available_from.split('T')[0] : '');
     setAvailableTo(box.available_to ? box.available_to.split('T')[0] : '');
+    setStartTime(box.start_time || '08:00');
+    setEndTime(box.end_time || '21:00');
     setIsModalOpen(true);
   };
 
@@ -59,6 +65,8 @@ export const BoxesView: React.FC = () => {
         is_temporary: !isPermanent,
         available_from: !isPermanent && availableFrom ? availableFrom : null,
         available_to: !isPermanent && availableTo ? availableTo : null,
+        start_time: startTime || '08:00',
+        end_time: endTime || '21:00',
         equipment: equipmentStr.split(',').map((s) => s.trim()).filter(Boolean),
       };
 
@@ -148,6 +156,10 @@ export const BoxesView: React.FC = () => {
                 <p className="text-xs text-graphite-500 mt-0.5">
                   {box.description || 'Puesto de atención'}
                 </p>
+                <div className="flex items-center gap-1.5 mt-2 text-[11px] font-semibold text-graphite-600 bg-silk-100/80 px-2.5 py-1 rounded-xl w-fit border border-rose-gold-100">
+                  <Clock className="w-3 h-3 text-rose-gold-600" />
+                  <span>Horario: {box.start_time || '08:00'} - {box.end_time || '21:00'}</span>
+                </div>
               </div>
 
               {/* Temporary Date Badge */}
@@ -298,6 +310,43 @@ export const BoxesView: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Rango Horario de Atención del Box */}
+              <div className="p-3.5 bg-white rounded-2xl border border-rose-gold-200 space-y-2">
+                <div className="flex items-center gap-1.5 font-bold text-graphite-800">
+                  <Clock className="w-3.5 h-3.5 text-rose-gold-600" />
+                  <span>Rango Horario de Atención del Box</span>
+                </div>
+                <p className="text-[10px] text-graphite-500">
+                  El sistema impedirá que se agenden turnos fuera de este horario:
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-graphite-600 mb-1">
+                      Hora Inicio (Apertura):
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-rose-gold-200 bg-silk-50 text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-graphite-600 mb-1">
+                      Hora Fin (Cierre):
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={endTime}
+                      onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-rose-gold-200 bg-silk-50 text-xs font-semibold"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>

@@ -173,6 +173,87 @@ function checkCollision(box_id: string, staff_id: string, start_time: string, en
   return { conflict: false };
 }
 
+// Validación de disponibilidad de Box (fechas y horario de funcionamiento)
+function checkBoxAvailability(box_id: string, start_time: string, end_time: string) {
+  const box = db.prepare(`SELECT * FROM boxes WHERE id = ? AND deleted_at IS NULL`).get(box_id) as any;
+  if (!box) {
+    return { valid: false, message: 'El Box seleccionado no existe o fue eliminado.' };
+  }
+
+  if (box.is_active === 0) {
+    return { valid: false, message: `El ${box.name} se encuentra inactivo.` };
+  }
+
+  const apptDate = start_time.split('T')[0]; // "YYYY-MM-DD"
+  
+  // Validar si es temporal y cae fuera de rango
+  if (box.is_temporary) {
+    if (box.available_from && box.available_from.split('T')[0] > apptDate) {
+      return {
+        valid: false,
+        message: `El ${box.name} no está disponible en la fecha seleccionada (disponible a partir del ${box.available_from.split('T')[0]}).`,
+      };
+    }
+    if (box.available_to && box.available_to.split('T')[0] < apptDate) {
+      return {
+        valid: false,
+        message: `El ${box.name} no está disponible en la fecha seleccionada (finalizó el ${box.available_to.split('T')[0]}).`,
+      };
+    }
+  }
+
+  // Validar horario de funcionamiento del Box
+  if (box.start_time && box.end_time) {
+    const apptStartDate = new Date(start_time);
+    const apptEndDate = new Date(end_time);
+
+    const apptStartHM = `${String(apptStartDate.getHours()).padStart(2, '0')}:${String(apptStartDate.getMinutes()).padStart(2, '0')}`;
+    const apptEndHM = `${String(apptEndDate.getHours()).padStart(2, '0')}:${String(apptEndDate.getMinutes()).padStart(2, '0')}`;
+
+    if (apptStartHM < box.start_time || apptEndHM > box.end_time) {
+      return {
+        valid: false,
+        message: `El ${box.name} funciona únicamente en el horario de ${box.start_time} a ${box.end_time}.`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+// Función auxiliar para registrar movimiento de seña en caja
+function recordDepositTransaction(appointmentId: string, clientId: string, depositAmount: number, paymentMethod: string, notes: string | null) {
+  if (!depositAmount || depositAmount <= 0) return;
+
+  const now = new Date().toISOString();
+  // Obtener shift actual abierto o crear uno
+  let activeShift = db.prepare(`SELECT id FROM cash_register_shifts WHERE status = 'open' LIMIT 1`).get() as any;
+  let activeShiftId = activeShift ? activeShift.id : null;
+  if (!activeShiftId) {
+    activeShiftId = uuidv4();
+    db.prepare(`
+      INSERT INTO cash_register_shifts (id, opened_at, initial_cash, total_incomes, total_expenses, expected_cash, status, opened_by, created_at, updated_at)
+      VALUES (?, ?, 0, 0, 0, 0, 'open', 'Sistema (Automático)', ?, ?)
+    `).run(activeShiftId, now, now, now);
+  }
+
+  const txId = uuidv4();
+  db.prepare(`
+    INSERT INTO cash_transactions (id, shift_id, appointment_id, client_id, type, category, amount, payment_method, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 'income', 'Seña de Turno', ?, ?, ?, ?, ?)
+  `).run(
+    txId,
+    activeShiftId,
+    appointmentId,
+    clientId || null,
+    depositAmount,
+    paymentMethod || 'cash',
+    notes || `Seña recibida para turno agendado`,
+    now,
+    now
+  );
+}
+
 // Crear turno
 appointmentsRouter.post('/', (req, res) => {
   try {
@@ -184,7 +265,13 @@ appointmentsRouter.post('/', (req, res) => {
       return res.status(400).json({ error: 'Sub-tratamiento no válido' });
     }
 
-    // Validar colisiones
+    // 1. Validar que el Box exista, esté activo en la fecha y dentro de su rango horario
+    const boxValidation = checkBoxAvailability(box_id, start_time, end_time);
+    if (!boxValidation.valid) {
+      return res.status(400).json({ error: boxValidation.message });
+    }
+
+    // 2. Validar colisiones
     const collision = checkCollision(box_id, staff_id, start_time, end_time);
     if (collision.conflict) {
       return res.status(409).json({ error: collision.message });
@@ -205,6 +292,12 @@ appointmentsRouter.post('/', (req, res) => {
       notes || null,
       now, now
     );
+
+    // 3. Si se registró una seña, computarla de inmediato en la caja
+    const numDeposit = Number(deposit_amount) || 0;
+    if (numDeposit > 0) {
+      recordDepositTransaction(id, client_id, numDeposit, deposit_payment_method || 'cash', `Seña recibida para turno de ${subTreatment.name}`);
+    }
 
     const created = getAppointmentById(id);
     if (io) io.emit('appointment:created', created);
@@ -238,6 +331,14 @@ appointmentsRouter.put('/:id', (req, res) => {
       whatsapp_reminder_sent_at = existing.whatsapp_reminder_sent_at,
     } = req.body;
 
+    // Si cambió horario o box, validar rango de box
+    if (box_id !== existing.box_id || start_time !== existing.start_time || end_time !== existing.end_time) {
+      const boxValidation = checkBoxAvailability(box_id, start_time, end_time);
+      if (!boxValidation.valid) {
+        return res.status(400).json({ error: boxValidation.message });
+      }
+    }
+
     // Si cambió horario o box/profesional, validar colisiones
     if (box_id !== existing.box_id || staff_id !== existing.staff_id || start_time !== existing.start_time || end_time !== existing.end_time) {
       if (status !== 'cancelled' && status !== 'no_show') {
@@ -246,6 +347,14 @@ appointmentsRouter.put('/:id', (req, res) => {
           return res.status(409).json({ error: collision.message });
         }
       }
+    }
+
+    // Si se aumentó la seña o se añadió una seña nueva, registrar el ingreso diferencial en caja
+    const newDeposit = Number(deposit_amount) || 0;
+    const oldDeposit = Number(existing.deposit_amount) || 0;
+    if (newDeposit > oldDeposit) {
+      const diff = newDeposit - oldDeposit;
+      recordDepositTransaction(req.params.id, client_id, diff, deposit_payment_method || existing.deposit_payment_method || 'cash', `Seña adicional recibida para turno`);
     }
 
     const now = new Date().toISOString();

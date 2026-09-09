@@ -5,6 +5,7 @@ import { startServer } from '../server/index.js';
 
 // Establecer carpeta de datos de usuario en AppData para evitar errores de permisos/cache
 app.setPath('userData', path.join(app.getPath('appData'), 'HikariSuite'));
+process.env.APP_VERSION = app.getVersion();
 
 // Parámetros de Chromium para suprimir logs y errores de GPU cache en consolas
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Appointment, Product, SubTreatment } from '../../types';
+import { Appointment, Product, SubTreatment, PaymentSurchargesConfig, PaymentCardRule } from '../../types';
 import { api } from '../../services/api';
 import {
   X,
@@ -18,6 +18,9 @@ import {
   Receipt,
   FileText,
   AlertCircle,
+  CreditCard,
+  Percent,
+  ChevronRight,
 } from 'lucide-react';
 
 interface Props {
@@ -34,11 +37,76 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
   const [status, setStatus] = useState(appointment.status);
   const [notes, setNotes] = useState(appointment.notes || '');
 
+  // Reglas de cobro y recargos
+  const [paymentRules, setPaymentRules] = useState<PaymentSurchargesConfig | null>(null);
+  const [showCheckoutModal, setShowCheckoutModal] = useState<boolean>(false);
+  const [checkoutPaymentMethod, setCheckoutPaymentMethod] = useState<'cash' | 'card_debit' | 'card_credit' | 'transfer'>('cash');
+  const [selectedCardRuleId, setSelectedCardRuleId] = useState<string>('');
+  const [customCardName, setCustomCardName] = useState<string>('');
+  const [customCardPercent, setCustomCardPercent] = useState<number>(5);
+
+  useEffect(() => {
+    api.getPaymentRules()
+      .then((rules) => {
+        setPaymentRules(rules);
+        if (rules.card_rules && rules.card_rules.length > 0) {
+          setSelectedCardRuleId(rules.card_rules[0].id);
+        }
+      })
+      .catch((err) => console.error('Error fetching payment rules:', err));
+  }, []);
+
   // Calcular totales
   const cartItems = appointment.cart_items || [];
   const cartTotal = cartItems.reduce((acc, item) => acc + item.subtotal, 0);
   const totalAmount = appointment.service_price + cartTotal;
   const balanceDue = Math.max(0, totalAmount - appointment.deposit_amount);
+
+  // Cálculo dinámico de recargo/descuento según método seleccionado
+  let adjustmentPercent = 0;
+  let adjustmentLabel = '';
+  let cardBrandName = '';
+
+  if (checkoutPaymentMethod === 'cash') {
+    const discount = paymentRules?.cash_discount_percent || 0;
+    if (discount > 0) {
+      adjustmentPercent = -discount;
+      adjustmentLabel = `Descuento Efectivo (-${discount}%)`;
+    }
+  } else if (checkoutPaymentMethod === 'card_debit') {
+    const surcharge = paymentRules?.debit_surcharge_percent || 0;
+    if (surcharge !== 0) {
+      adjustmentPercent = surcharge;
+      adjustmentLabel = surcharge > 0 ? `Recargo Débito (+${surcharge}%)` : `Descuento Débito (${surcharge}%)`;
+    }
+  } else if (checkoutPaymentMethod === 'transfer') {
+    const discount = paymentRules?.transfer_discount_percent || 0;
+    if (discount !== 0) {
+      adjustmentPercent = -discount;
+      adjustmentLabel = discount > 0 ? `Descuento Transf. (-${discount}%)` : `Recargo Transf. (+${Math.abs(discount)}%)`;
+    }
+  } else if (checkoutPaymentMethod === 'card_credit') {
+    if (selectedCardRuleId === 'custom') {
+      adjustmentPercent = customCardPercent || 0;
+      cardBrandName = customCardName.trim() || 'Tarjeta';
+      adjustmentLabel = adjustmentPercent >= 0 ? `Recargo (+${adjustmentPercent}%)` : `Descuento (${adjustmentPercent}%)`;
+    } else {
+      const rule = paymentRules?.card_rules.find((r) => r.id === selectedCardRuleId);
+      if (rule) {
+        adjustmentPercent = rule.percentage;
+        cardBrandName = rule.name;
+        adjustmentLabel = `${rule.name} (${rule.percentage >= 0 ? '+' : ''}${rule.percentage}%)`;
+      } else {
+        const def = paymentRules?.credit_default_surcharge_percent || 0;
+        adjustmentPercent = def;
+        cardBrandName = 'Tarjeta de Crédito';
+        adjustmentLabel = def > 0 ? `Recargo Tarjeta (+${def}%)` : 'Tarjeta';
+      }
+    }
+  }
+
+  const adjustmentAmount = Math.round((balanceDue * adjustmentPercent) / 100);
+  const finalCalculatedAmount = Math.max(0, balanceDue + adjustmentAmount);
 
   // Formatear fechas
   const startDate = new Date(appointment.start_time);
@@ -118,7 +186,7 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
   const handleUpdateDetails = async (newStatus?: string) => {
     try {
       setLoadingAction(true);
-      const updated = await api.updateAppointment(appointment.id, {
+      await api.updateAppointment(appointment.id, {
         status: newStatus || status,
         notes,
       });
@@ -147,27 +215,53 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
     }
   };
 
+  // Abrir checkout con un método seleccionado
+  const handleOpenCheckout = (method: 'cash' | 'card_debit' | 'card_credit' | 'transfer') => {
+    setCheckoutPaymentMethod(method);
+    setShowCheckoutModal(true);
+  };
+
+  // Completar turno cuando no hay saldo pendiente
+  const handleCompleteWithoutBalance = async () => {
+    try {
+      setLoadingAction(true);
+      await api.updateAppointment(appointment.id, {
+        status: 'completed',
+        notes,
+      });
+      setStatus('completed');
+      await refreshAppointments();
+      addToast({ type: 'success', title: '¡Turno completado exitosamente!' });
+      onClose();
+    } catch (error: any) {
+      addToast({ type: 'error', title: 'Error al completar turno', message: error.message });
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
   // Cobrar saldo y registrar en caja
-  const handleCheckout = async (paymentMethod: string) => {
-    if (balanceDue <= 0 && appointment.status === 'completed') {
-      addToast({ type: 'info', title: 'Este turno ya fue completado y liquidado' });
+  const handleExecuteCheckout = async () => {
+    if (balanceDue <= 0) {
+      await handleCompleteWithoutBalance();
       return;
     }
 
     try {
       setLoadingAction(true);
       // Registrar transacción en caja
-      if (balanceDue > 0) {
-        await api.createCashTransaction({
-          appointment_id: appointment.id,
-          client_id: appointment.client_id,
-          type: 'income',
-          category: `Atención: ${appointment.sub_treatment?.name}`,
-          amount: balanceDue,
-          payment_method: paymentMethod,
-          notes: `Cobro final de turno #${appointment.id.substring(0, 8)}`,
-        });
-      }
+      await api.createCashTransaction({
+        shift_id: activeShift?.id,
+        appointment_id: appointment.id,
+        client_id: appointment.client_id,
+        type: 'income',
+        category: `Atención: ${appointment.sub_treatment?.name || 'Turno'}`,
+        amount: finalCalculatedAmount,
+        payment_method: checkoutPaymentMethod,
+        card_brand: (checkoutPaymentMethod === 'card_credit' || checkoutPaymentMethod === 'card_debit') ? cardBrandName : undefined,
+        surcharge_percentage: adjustmentPercent !== 0 ? adjustmentPercent : undefined,
+        notes: `Cobro final turno #${appointment.id.substring(0, 8)}${cardBrandName ? ` (${cardBrandName})` : ''}`,
+      });
 
       // Marcar turno como completado
       await api.updateAppointment(appointment.id, {
@@ -177,7 +271,13 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
 
       setStatus('completed');
       await refreshAppointments();
-      addToast({ type: 'success', title: '¡Cobro registrado y turno completado!' });
+      addToast({
+        type: 'success',
+        title: '¡Cobro registrado y turno completado!',
+        message: `Monto liquidado: $${finalCalculatedAmount.toLocaleString('es-AR')}`,
+      });
+      setShowCheckoutModal(false);
+      onClose(); // Se cierra automáticamente al cobrar y finalizar
     } catch (error: any) {
       addToast({ type: 'error', title: 'Error al registrar cobro', message: error.message });
     } finally {
@@ -474,34 +574,269 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
             Guardar Notas
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-graphite-600 hidden sm:inline">
-              Cobrar Saldo:
-            </span>
-            <button
-              onClick={() => handleCheckout('cash')}
-              disabled={loadingAction}
-              className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
-            >
-              💵 Efectivo
-            </button>
-            <button
-              onClick={() => handleCheckout('transfer')}
-              disabled={loadingAction}
-              className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition-all"
-            >
-              📱 Transferencia / MP
-            </button>
-            <button
-              onClick={() => handleCheckout('card_credit')}
-              disabled={loadingAction}
-              className="px-3 py-2 rounded-xl bg-rose-gold-600 hover:bg-rose-gold-700 text-white text-xs font-semibold shadow-sm transition-all"
-            >
-              💳 Tarjeta
-            </button>
-          </div>
+          {status === 'completed' ? (
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                Turno Finalizado y Cobrado
+              </span>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-xl bg-graphite-800 hover:bg-graphite-900 text-white text-xs font-semibold transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          ) : balanceDue <= 0 ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCompleteWithoutBalance}
+                disabled={loadingAction}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-soft transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Finalizar Turno (Saldo $0)
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-graphite-600 hidden sm:inline">
+                Cobrar Saldo:
+              </span>
+              <button
+                onClick={() => handleOpenCheckout('cash')}
+                disabled={loadingAction}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+                title="Pagar con efectivo"
+              >
+                💵 Efectivo {paymentRules?.cash_discount_percent ? `(-${paymentRules.cash_discount_percent}%)` : ''}
+              </button>
+              <button
+                onClick={() => handleOpenCheckout('card_credit')}
+                disabled={loadingAction}
+                className="px-3 py-2 rounded-xl bg-rose-gold-600 hover:bg-rose-gold-700 text-white text-xs font-semibold shadow-sm transition-all"
+                title="Pagar con tarjeta de crédito o débito"
+              >
+                💳 Tarjeta
+              </button>
+              <button
+                onClick={() => handleOpenCheckout('transfer')}
+                disabled={loadingAction}
+                className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition-all"
+                title="Pagar con transferencia bancaria o Mercado Pago"
+              >
+                📱 Transferencia
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modal de Liquidación / Cobro con Recargos y Selección de Tarjeta */}
+      {showCheckoutModal && (
+        <div className="fixed inset-0 z-60 bg-graphite-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col">
+            {/* Header del Cobro */}
+            <div className="p-4 bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-white/20">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-sm">Cobro y Cierre de Turno</h3>
+                  <p className="text-[11px] text-white/80">
+                    Cliente: {appointment.client?.first_name} {appointment.client?.last_name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCheckoutModal(false)}
+                className="p-1 rounded-lg hover:bg-white/20 text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Contenido del Cobro */}
+            <div className="p-5 space-y-4 text-xs">
+              {/* Selector de Medio de Pago */}
+              <div>
+                <label className="text-xs font-bold text-graphite-700 block mb-2">
+                  Seleccione el Medio de Pago:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutPaymentMethod('cash')}
+                    className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                      checkoutPaymentMethod === 'cash'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 font-bold shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-rose-gold-200 hover:bg-silk-100 text-graphite-700'
+                    }`}
+                  >
+                    <div className="text-base mb-0.5">💵</div>
+                    <div>Efectivo</div>
+                    {paymentRules?.cash_discount_percent ? (
+                      <div className="text-[10px] text-emerald-600 font-bold">-{paymentRules.cash_discount_percent}% desc.</div>
+                    ) : null}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutPaymentMethod('card_credit')}
+                    className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                      checkoutPaymentMethod === 'card_credit'
+                        ? 'border-rose-gold-500 bg-rose-gold-50 text-rose-gold-800 font-bold shadow-xs ring-2 ring-rose-gold-500/20'
+                        : 'border-rose-gold-200 hover:bg-silk-100 text-graphite-700'
+                    }`}
+                  >
+                    <div className="text-base mb-0.5">💳</div>
+                    <div>T. Crédito</div>
+                    <div className="text-[10px] text-rose-gold-600">Por banco/red</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutPaymentMethod('card_debit')}
+                    className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                      checkoutPaymentMethod === 'card_debit'
+                        ? 'border-rose-gold-500 bg-rose-gold-50 text-rose-gold-800 font-bold shadow-xs ring-2 ring-rose-gold-500/20'
+                        : 'border-rose-gold-200 hover:bg-silk-100 text-graphite-700'
+                    }`}
+                  >
+                    <div className="text-base mb-0.5">💳</div>
+                    <div>T. Débito</div>
+                    {paymentRules?.debit_surcharge_percent ? (
+                      <div className="text-[10px] text-amber-600">+{paymentRules.debit_surcharge_percent}% rec.</div>
+                    ) : null}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutPaymentMethod('transfer')}
+                    className={`p-2.5 rounded-xl border text-center font-medium transition-all ${
+                      checkoutPaymentMethod === 'transfer'
+                        ? 'border-sky-500 bg-sky-50 text-sky-800 font-bold shadow-xs ring-2 ring-sky-500/20'
+                        : 'border-rose-gold-200 hover:bg-silk-100 text-graphite-700'
+                    }`}
+                  >
+                    <div className="text-base mb-0.5">📱</div>
+                    <div>Transf. / MP</div>
+                    {paymentRules?.transfer_discount_percent ? (
+                      <div className="text-[10px] text-sky-600">-{paymentRules.transfer_discount_percent}% desc.</div>
+                    ) : null}
+                  </button>
+                </div>
+              </div>
+
+              {/* Si es Tarjeta de Crédito: Consulta específica de tarjeta */}
+              {checkoutPaymentMethod === 'card_credit' && (
+                <div className="p-3.5 bg-rose-gold-50/70 border border-rose-gold-200 rounded-2xl space-y-2.5">
+                  <label className="text-xs font-bold text-graphite-800 flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-rose-gold-600" />
+                    ¿Qué tarjeta / entidad bancaria presenta el cliente?
+                  </label>
+                  <select
+                    value={selectedCardRuleId}
+                    onChange={(e) => setSelectedCardRuleId(e.target.value)}
+                    className="w-full text-xs p-2.5 rounded-xl bg-white border border-rose-gold-300 text-graphite-800 font-medium focus:ring-1 focus:ring-rose-gold-400"
+                  >
+                    {paymentRules?.card_rules && paymentRules.card_rules.length > 0 ? (
+                      paymentRules.card_rules
+                        .filter((r) => r.is_active)
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name} ({r.percentage >= 0 ? `+${r.percentage}% recargo` : `${r.percentage}% descuento`})
+                          </option>
+                        ))
+                    ) : (
+                      <option value="default">Tarjeta Estándar (+{paymentRules?.credit_default_surcharge_percent || 5}%)</option>
+                    )}
+                    <option value="custom">Otra tarjeta personalizada...</option>
+                  </select>
+
+                  {selectedCardRuleId === 'custom' && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <label className="text-[11px] font-semibold text-graphite-600 block mb-1">
+                          Nombre Tarjeta:
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Cabal / Naranja"
+                          value={customCardName}
+                          onChange={(e) => setCustomCardName(e.target.value)}
+                          className="w-full text-xs p-2 rounded-xl bg-white border border-rose-gold-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-graphite-600 block mb-1">
+                          % Recargo / Descuento:
+                        </label>
+                        <input
+                          type="number"
+                          value={customCardPercent}
+                          onChange={(e) => setCustomCardPercent(Number(e.target.value))}
+                          className="w-full text-xs p-2 rounded-xl bg-white border border-rose-gold-300"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Resumen de Liquidación */}
+              <div className="p-4 bg-silk-50 rounded-2xl border border-rose-gold-200/90 space-y-2">
+                <div className="flex justify-between text-graphite-600">
+                  <span>Saldo base a cancelar:</span>
+                  <span className="font-semibold text-graphite-900">
+                    ${balanceDue.toLocaleString('es-AR')}
+                  </span>
+                </div>
+
+                {adjustmentPercent !== 0 && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className={adjustmentPercent > 0 ? 'text-amber-700' : 'text-emerald-700'}>
+                      {adjustmentLabel}:
+                    </span>
+                    <span className={`font-bold ${adjustmentPercent > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                      {adjustmentAmount > 0 ? `+$${adjustmentAmount.toLocaleString('es-AR')}` : `-$${Math.abs(adjustmentAmount).toLocaleString('es-AR')}`}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-sm font-extrabold text-graphite-900 pt-2 border-t border-rose-gold-200">
+                  <span>Total Final a Cobrar:</span>
+                  <span className="text-base text-rose-gold-800">
+                    ${finalCalculatedAmount.toLocaleString('es-AR')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Acciones del Checkout */}
+            <div className="p-4 bg-silk-50 border-t border-rose-gold-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowCheckoutModal(false)}
+                disabled={loadingAction}
+                className="px-4 py-2 rounded-xl border border-rose-gold-300 text-xs font-semibold text-graphite-700 hover:bg-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteCheckout}
+                disabled={loadingAction}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white text-xs font-bold shadow-soft transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Confirmar Cobro (${finalCalculatedAmount.toLocaleString('es-AR')}) y Finalizar</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -26,7 +26,14 @@ import {
 
 export const StaffView: React.FC = () => {
   const { staff, refreshAllData, addToast, setIsStaffQrModalOpen } = useApp();
-  const [viewMode, setViewMode] = useState<'grid' | 'spreadsheet'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'spreadsheet'>(() => {
+    return (localStorage.getItem('hikari_view_mode_staff') as 'grid' | 'spreadsheet') || 'grid';
+  });
+
+  const handleSetViewMode = (mode: 'grid' | 'spreadsheet') => {
+    setViewMode(mode);
+    localStorage.setItem('hikari_view_mode_staff', mode);
+  };
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
@@ -136,7 +143,7 @@ export const StaffView: React.FC = () => {
           {/* Selector de Modo: Tarjetas vs Planilla */}
           <div className="flex bg-white p-1 rounded-2xl border border-rose-gold-200 shadow-sm">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => handleSetViewMode('grid')}
               title="Vista de Tarjetas"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                 viewMode === 'grid'
@@ -148,7 +155,7 @@ export const StaffView: React.FC = () => {
               <span className="hidden sm:inline">Tarjetas</span>
             </button>
             <button
-              onClick={() => setViewMode('spreadsheet')}
+              onClick={() => handleSetViewMode('spreadsheet')}
               title="Vista en Modo Planilla (Tabla interactiva)"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                 viewMode === 'spreadsheet'

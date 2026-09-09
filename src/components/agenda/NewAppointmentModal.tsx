@@ -31,7 +31,17 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
   const [staffId, setStaffId] = useState<string>(staff[0]?.id || '');
   const [boxId, setBoxId] = useState<string>(initialBoxId || boxes[0]?.id || '');
   
-  // Tratamientos y Sub-tratamientos
+  // Filtrar boxes que estén disponibles en la fecha seleccionada
+  const availableBoxes = boxes.filter((b) => {
+    if (!b.is_active) return false;
+    if (!b.is_temporary) return true;
+    const selDate = new Date(selectedDate);
+    if (b.available_from && new Date(b.available_from) > selDate) return false;
+    if (b.available_to && new Date(b.available_to) < selDate) return false;
+    return true;
+  });
+
+  const selectedBox = boxes.find((b) => b.id === boxId);
   const allSubTreatments = treatments.flatMap((t) =>
     (t.sub_treatments || []).map((st: SubTreatment) => ({
       ...st,
@@ -169,6 +179,25 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
     if (!clientId || !staffId || !boxId || !subTreatmentId) {
       addToast({ type: 'warning', title: 'Por favor complete todos los campos requeridos' });
       return;
+    }
+
+    // Validar rango horario del box
+    const currentBox = boxes.find((b) => b.id === boxId);
+    if (currentBox && currentBox.start_time && currentBox.end_time) {
+      const duration = selectedSub?.duration_minutes || 45;
+      const startDateTime = new Date(`${selectedDate}T${startTime}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+      const apptStartHM = `${String(startDateTime.getHours()).padStart(2, '0')}:${String(startDateTime.getMinutes()).padStart(2, '0')}`;
+      const apptEndHM = `${String(endDateTime.getHours()).padStart(2, '0')}:${String(endDateTime.getMinutes()).padStart(2, '0')}`;
+
+      if (apptStartHM < currentBox.start_time || apptEndHM > currentBox.end_time) {
+        addToast({
+          type: 'error',
+          title: 'Horario fuera del rango del Box',
+          message: `El ${currentBox.name} opera de ${currentBox.start_time} a ${currentBox.end_time}.`,
+        });
+        return;
+      }
     }
 
     try {
@@ -342,12 +371,21 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
                 required
                 className="w-full text-xs p-2.5 rounded-xl bg-white border border-rose-gold-200 text-graphite-800 focus:outline-none focus:ring-1 focus:ring-rose-gold-400"
               >
-                {boxes.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
+                {availableBoxes.length === 0 ? (
+                  <option value="">No hay boxes activos en esta fecha</option>
+                ) : (
+                  availableBoxes.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.start_time || '08:00'} - {b.end_time || '21:00'})
+                    </option>
+                  ))
+                )}
               </select>
+              {selectedBox && (
+                <p className="text-[10px] text-graphite-500 mt-1">
+                  🕒 Horario del box: {selectedBox.start_time || '08:00'} a {selectedBox.end_time || '21:00'}
+                </p>
+              )}
             </div>
           </div>
 

@@ -34,18 +34,20 @@ boxesRouter.get('/', (req, res) => {
 // Crear box
 boxesRouter.post('/', (req, res) => {
   try {
-    const { name, number, description, color_code, order_index, equipment, is_temporary, available_from, available_to } = req.body;
+    const { name, number, description, color_code, order_index, equipment, is_temporary, available_from, available_to, start_time, end_time } = req.body;
     const id = uuidv4();
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO boxes (id, name, number, description, color_code, order_index, is_active, is_temporary, available_from, available_to, equipment_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      INSERT INTO boxes (id, name, number, description, color_code, order_index, is_active, is_temporary, available_from, available_to, start_time, end_time, equipment_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, name, number || 1, description || null, color_code || '#C59B7E', order_index || 0,
       is_temporary ? 1 : 0,
       is_temporary ? (available_from || null) : null,
       is_temporary ? (available_to || null) : null,
+      start_time || '08:00',
+      end_time || '21:00',
       JSON.stringify(equipment || []),
       now, now
     );
@@ -64,18 +66,20 @@ boxesRouter.post('/', (req, res) => {
 // Editar box
 boxesRouter.put('/:id', (req, res) => {
   try {
-    const { name, number, description, color_code, order_index, is_active, equipment, is_temporary, available_from, available_to } = req.body;
+    const { name, number, description, color_code, order_index, is_active, equipment, is_temporary, available_from, available_to, start_time, end_time } = req.body;
     const now = new Date().toISOString();
 
     db.prepare(`
       UPDATE boxes 
-      SET name = ?, number = ?, description = ?, color_code = ?, order_index = ?, is_active = ?, is_temporary = ?, available_from = ?, available_to = ?, equipment_json = ?, updated_at = ?
+      SET name = ?, number = ?, description = ?, color_code = ?, order_index = ?, is_active = ?, is_temporary = ?, available_from = ?, available_to = ?, start_time = ?, end_time = ?, equipment_json = ?, updated_at = ?
       WHERE id = ? AND deleted_at IS NULL
     `).run(
       name, number, description || null, color_code, order_index || 0, is_active !== false ? 1 : 0,
       is_temporary ? 1 : 0,
       is_temporary ? (available_from || null) : null,
       is_temporary ? (available_to || null) : null,
+      start_time || '08:00',
+      end_time || '21:00',
       JSON.stringify(equipment || []),
       now, req.params.id
     );

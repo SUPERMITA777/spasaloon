@@ -65,6 +65,8 @@ export interface Box extends BaseEntity {
   is_temporary?: boolean;
   available_from?: string | null;
   available_to?: string | null;
+  start_time?: string | null; // ej "09:00"
+  end_time?: string | null;   // ej "19:00"
   equipment?: string[];
 }
 
@@ -496,6 +498,9 @@ export interface CashRegisterShift extends BaseEntity {
   total_incomes: number;
   total_expenses: number;
   expected_cash: number;
+  total_cash?: number;
+  total_cards?: number;
+  total_transfers?: number;
   actual_cash: number | null;
   difference: number | null;
   status: 'open' | 'closed';
@@ -504,7 +509,22 @@ export interface CashRegisterShift extends BaseEntity {
   notes: string | null;
 }
 
-export type PaymentMethod = 'cash' | 'card_debit' | 'card_credit' | 'transfer' | 'qr_mercadopago';
+export type PaymentMethod = 'cash' | 'card_debit' | 'card_credit' | 'transfer' | string;
+
+export interface PaymentCardRule {
+  id: string;
+  name: string; // ej. "Mastercard", "Visa Banco Nación"
+  percentage: number; // Positivo = recargo (ej. 5), Negativo = descuento (ej. -5)
+  is_active: boolean;
+}
+
+export interface PaymentSurchargesConfig {
+  cash_discount_percent: number; // ej. 10 para 10% de descuento
+  debit_surcharge_percent: number; // ej. 0
+  transfer_discount_percent: number; // ej. 0
+  credit_default_surcharge_percent: number; // ej. 5
+  card_rules: PaymentCardRule[];
+}
 
 export interface CashTransaction extends BaseEntity {
   shift_id: UUID;
@@ -512,9 +532,11 @@ export interface CashTransaction extends BaseEntity {
   client_id: UUID | null;
   client_name?: string;
   type: 'income' | 'expense';
-  category: string; // "Cobro de Turno", "Venta de Producto", "Insumos", "Servicios Luz/Gas", "Extracción"
+  category: string; // "Cobro de Turno", "Seña de Turno", "Venta de Producto", "Insumos", etc.
   amount: number;
   payment_method: PaymentMethod;
+  card_brand?: string | null;
+  surcharge_percentage?: number | null;
   notes: string | null;
 }
 

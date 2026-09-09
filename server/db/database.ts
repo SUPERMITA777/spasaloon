@@ -503,6 +503,21 @@ export function initDatabase() {
     if (!colNames.includes('available_to')) {
       db.exec(`ALTER TABLE boxes ADD COLUMN available_to TEXT;`);
     }
+    if (!colNames.includes('start_time')) {
+      db.exec(`ALTER TABLE boxes ADD COLUMN start_time TEXT DEFAULT '08:00';`);
+    }
+    if (!colNames.includes('end_time')) {
+      db.exec(`ALTER TABLE boxes ADD COLUMN end_time TEXT DEFAULT '21:00';`);
+    }
+
+    const cashTableInfo = db.prepare(`PRAGMA table_info(cash_transactions)`).all() as any[];
+    const cashColNames = cashTableInfo.map(c => c.name);
+    if (!cashColNames.includes('card_brand')) {
+      db.exec(`ALTER TABLE cash_transactions ADD COLUMN card_brand TEXT;`);
+    }
+    if (!cashColNames.includes('surcharge_percentage')) {
+      db.exec(`ALTER TABLE cash_transactions ADD COLUMN surcharge_percentage REAL;`);
+    }
 
     const consentTableInfo = db.prepare(`PRAGMA table_info(informed_consents)`).all() as any[];
     const consentColNames = consentTableInfo.map(c => c.name);

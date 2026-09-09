@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Appointment, Box, Staff } from '../../types';
 import { api } from '../../services/api';
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
   GripVertical,
+  RotateCcw,
 } from 'lucide-react';
 
 const TIME_SLOTS = [
@@ -22,6 +23,10 @@ const TIME_SLOTS = [
   '17:00', '17:30', '18:00', '18:30', '19:00', '19:30',
   '20:00', '20:30'
 ];
+
+const DEFAULT_COL_WIDTH = 270;
+const MIN_COL_WIDTH = 180;
+const MAX_COL_WIDTH = 550;
 
 export const AgendaView: React.FC = () => {
   const {
@@ -35,8 +40,110 @@ export const AgendaView: React.FC = () => {
     addToast,
   } = useApp();
 
-  const [viewMode, setViewMode] = useState<'boxes' | 'staff'>('boxes');
+  // Persistencia de la vista boxes vs staff
+  const [viewMode, setViewMode] = useState<'boxes' | 'staff'>(() => {
+    return (localStorage.getItem('hikari_agenda_view_mode') as 'boxes' | 'staff') || 'boxes';
+  });
+
+  const handleSetViewMode = (mode: 'boxes' | 'staff') => {
+    setViewMode(mode);
+    localStorage.setItem('hikari_agenda_view_mode', mode);
+  };
+
   const [draggedApptId, setDraggedApptId] = useState<string | null>(null);
+
+  // Anchos de columna estilo Excel persistidos en localStorage
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('hikari_agenda_col_widths');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Guardar en localStorage cuando cambien los anchos
+  useEffect(() => {
+    try {
+      localStorage.setItem('hikari_agenda_col_widths', JSON.stringify(columnWidths));
+    } catch (e) {}
+  }, [columnWidths]);
+
+  // Estado del redimensionamiento interactivo (Excel resize)
+  const [resizingColId, setResizingColId] = useState<string | null>(null);
+  const startXRef = useRef<number>(0);
+  const startWidthRef = useRef<number>(DEFAULT_COL_WIDTH);
+
+  const handleMouseDownResize = (e: React.MouseEvent, colId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setResizingColId(colId);
+    startXRef.current = e.clientX;
+    startWidthRef.current = columnWidths[colId] || DEFAULT_COL_WIDTH;
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!resizingColId) return;
+    const deltaX = e.clientX - startXRef.current;
+    const newWidth = Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, startWidthRef.current + deltaX));
+    setColumnWidths((prev) => ({
+      ...prev,
+      [resizingColId]: newWidth,
+    }));
+  }, [resizingColId]);
+
+  const handleMouseUp = useCallback(() => {
+    setResizingColId(null);
+  }, []);
+
+  useEffect(() => {
+    if (resizingColId) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [resizingColId, handleMouseMove, handleMouseUp]);
+
+  // Restablecer anchos de columna
+  const handleResetWidths = () => {
+    setColumnWidths({});
+    localStorage.removeItem('hikari_agenda_col_widths');
+    addToast({ type: 'info', title: 'Anchos de columna restablecidos' });
+  };
+
+  // Línea roja indicadora de la hora actual en tiempo real
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Comprobar si la fecha seleccionada es hoy
+  const isToday = () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return selectedDate === todayStr;
+  };
+
+  // Calcular la posición vertical de la hora actual en píxeles (cada 30 min = 40px)
+  const getCurrentTimeTopPx = () => {
+    const hours = currentTime.getHours();
+    const minutes = currentTime.getMinutes();
+    const minsFrom8 = (hours - 8) * 60 + minutes;
+    if (minsFrom8 < 0 || minsFrom8 > 13 * 60) return null; // Fuera del horario de agenda 08:00 a 21:00
+    return (minsFrom8 / 30) * 40;
+  };
+
+  const currentTimeTop = isToday() ? getCurrentTimeTopPx() : null;
 
   // Helper para convertir "HH:mm" a minutos desde las 08:00
   const getMinutesFromDayStart = (timeString: string) => {
@@ -120,12 +227,12 @@ export const AgendaView: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] bg-silk-100 overflow-hidden">
       {/* Top Filter & View Mode Bar */}
-      <div className="px-6 py-3 bg-white/60 backdrop-blur-sm border-b border-rose-gold-200/50 flex items-center justify-between">
+      <div className="px-6 py-3 bg-white/70 backdrop-blur-md border-b border-rose-gold-200/50 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="text-xs font-semibold text-graphite-600">Visualizar por:</div>
           <div className="flex bg-silk-200 p-1 rounded-2xl border border-rose-gold-200/60 shadow-inner">
             <button
-              onClick={() => setViewMode('boxes')}
+              onClick={() => handleSetViewMode('boxes')}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-xl transition-all ${
                 viewMode === 'boxes'
                   ? 'bg-white text-rose-gold-800 shadow-soft font-bold'
@@ -137,7 +244,7 @@ export const AgendaView: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setViewMode('staff')}
+              onClick={() => handleSetViewMode('staff')}
               className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-xl transition-all ${
                 viewMode === 'staff'
                   ? 'bg-white text-rose-gold-800 shadow-soft font-bold'
@@ -148,10 +255,23 @@ export const AgendaView: React.FC = () => {
               <span>Profesionales ({staff.length})</span>
             </button>
           </div>
+
+          <button
+            onClick={handleResetWidths}
+            title="Restablecer ancho de columnas a valor predeterminado"
+            className="p-1.5 text-graphite-400 hover:text-rose-gold-700 hover:bg-silk-200 rounded-xl transition-colors text-[11px] flex items-center gap-1"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Restablecer anchos</span>
+          </button>
         </div>
 
         {/* Legend / Info */}
         <div className="hidden lg:flex items-center gap-4 text-[11px] text-graphite-500">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-0.5 bg-rose-500 rounded-full"></span>
+            <span className="text-rose-600 font-semibold">Hora actual</span>
+          </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             Confirmado / Señado
@@ -165,47 +285,80 @@ export const AgendaView: React.FC = () => {
             Agendado
           </span>
           <span className="text-rose-gold-600 font-medium">
-            💡 Arrastra con el mouse para mover horarios o boxes
+            💡 Arrastra los bordes de columna para cambiar su tamaño (tipo Excel)
           </span>
         </div>
       </div>
 
       {/* Grid Container */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto flex flex-col bg-silk-50/70 select-none">
+      <div className="flex-1 overflow-x-auto overflow-y-auto flex flex-col bg-silk-50/70 select-none relative">
         {/* Column Headers (Sticky Top) */}
-        <div className="flex border-b border-rose-gold-200 bg-white sticky top-0 z-20 shadow-sm shrink-0 min-w-max">
-          {/* Time Column Header */}
-          <div className="w-20 shrink-0 p-3 border-r border-rose-gold-200 bg-silk-100/80 flex items-center justify-center text-xs font-bold text-graphite-600">
+        <div className="flex border-b border-rose-gold-200 bg-white sticky top-0 z-30 shadow-xs shrink-0 min-w-max">
+          {/* Time Column Header - Sticky Left */}
+          <div className="w-20 shrink-0 p-3 border-r border-rose-gold-200 bg-silk-100 sticky left-0 z-40 flex items-center justify-center text-xs font-bold text-graphite-700 shadow-[2px_0_5px_rgba(0,0,0,0.03)]">
             <Clock className="w-4 h-4 text-rose-gold-500 mr-1" />
             Hora
           </div>
 
-          {/* Dynamic Columns (Boxes or Staff) */}
+          {/* Dynamic Columns (Boxes or Staff) with Excel Resize Handle */}
           {activeColumns.map((col: any) => {
             const isBox = viewMode === 'boxes';
+            const colWidth = columnWidths[col.id] || DEFAULT_COL_WIDTH;
+            const customColor = col.color_code || '#C59B7E';
+
             return (
               <div
                 key={col.id}
-                className="w-64 sm:w-72 shrink-0 p-3 border-r border-rose-gold-200 flex items-center justify-between bg-white"
+                style={{
+                  width: `${colWidth}px`,
+                  backgroundColor: `${customColor}0D`, // Tinte sutil en header
+                  borderTop: `3px solid ${customColor}`,
+                }}
+                className="shrink-0 p-3 border-r border-rose-gold-200 flex items-center justify-between relative group"
               >
-                <div className="flex items-center gap-2 truncate">
+                <div className="flex items-center gap-2 truncate min-w-0 pr-2">
                   <span
-                    className="w-3 h-3 rounded-full shrink-0 shadow-sm"
-                    style={{ backgroundColor: col.color_code || '#C59B7E' }}
+                    className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm border border-white"
+                    style={{ backgroundColor: customColor }}
                   />
-                  <div className="truncate">
-                    <h3 className="font-serif font-bold text-xs text-graphite-900 truncate">
-                      {col.name || `${col.first_name} ${col.last_name}`}
+                  <div className="truncate min-w-0">
+                    <h3 className="font-serif font-bold text-xs text-graphite-900 truncate flex items-center gap-1">
+                      <span>{col.name || `${col.first_name} ${col.last_name}`}</span>
                     </h3>
                     <p className="text-[10px] text-graphite-500 truncate">
-                      {isBox ? (col.description || `Box #${col.number}`) : col.role}
+                      {isBox
+                        ? `${col.start_time || '08:00'} a ${col.end_time || '21:00'}`
+                        : col.role}
                     </p>
                   </div>
                 </div>
 
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-silk-100 text-graphite-600 font-medium shrink-0 border border-silk-300">
-                  {isBox ? `Sala ${col.number}` : col.first_name}
+                <span
+                  className="text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 border"
+                  style={{
+                    backgroundColor: `${customColor}20`,
+                    color: customColor,
+                    borderColor: `${customColor}40`,
+                  }}
+                >
+                  {isBox ? `Box #${col.number}` : col.first_name}
                 </span>
+
+                {/* Handle de redimensionamiento estilo Excel */}
+                <div
+                  onMouseDown={(e) => handleMouseDownResize(e, col.id)}
+                  onDoubleClick={() => {
+                    setColumnWidths((prev) => {
+                      const next = { ...prev };
+                      delete next[col.id];
+                      return next;
+                    });
+                  }}
+                  title="Arrastrar para redimensionar / Doble clic para auto-ajuste"
+                  className="absolute right-0 top-0 bottom-0 w-2.5 cursor-col-resize hover:bg-rose-gold-400/50 active:bg-rose-gold-600 transition-colors z-20 flex items-center justify-center group-hover:opacity-100 opacity-30"
+                >
+                  <div className="w-[1.5px] h-4 bg-rose-gold-400 rounded-full" />
+                </div>
               </div>
             );
           })}
@@ -213,8 +366,8 @@ export const AgendaView: React.FC = () => {
 
         {/* Schedule Body with Time Rows */}
         <div className="flex relative flex-1 min-w-max">
-          {/* Time Gutter (Left) */}
-          <div className="w-20 shrink-0 border-r border-rose-gold-200 bg-silk-100/50 z-10">
+          {/* Time Gutter (Left) - Sticky Left Always Visible */}
+          <div className="w-20 shrink-0 border-r border-rose-gold-200 bg-silk-100/95 sticky left-0 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.03)] backdrop-blur-xs">
             {TIME_SLOTS.map((time) => (
               <div
                 key={time}
@@ -225,8 +378,27 @@ export const AgendaView: React.FC = () => {
             ))}
           </div>
 
+          {/* Línea Roja del Horario Actual */}
+          {currentTimeTop !== null && (
+            <div
+              style={{ top: `${currentTimeTop}px` }}
+              className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+            >
+              {/* Punto indicador rojo en columna de horas */}
+              <div className="w-20 shrink-0 sticky left-0 flex items-center justify-end pr-1 z-30">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white shadow-xs" />
+              </div>
+              {/* Línea roja continua en todo el ancho de la agenda */}
+              <div className="flex-1 h-[2px] bg-rose-500 shadow-xs" />
+            </div>
+          )}
+
           {/* Columns Grid Cells and Floating Cards */}
           {activeColumns.map((col: any) => {
+            const isBox = viewMode === 'boxes';
+            const colWidth = columnWidths[col.id] || DEFAULT_COL_WIDTH;
+            const customColor = col.color_code || '#C59B7E';
+
             // Filtrar turnos de esta columna
             const columnAppts = appointments.filter((a) => {
               if (viewMode === 'boxes') return a.box_id === col.id;
@@ -236,7 +408,11 @@ export const AgendaView: React.FC = () => {
             return (
               <div
                 key={col.id}
-                className="w-64 sm:w-72 shrink-0 border-r border-rose-gold-200/80 relative bg-white/40"
+                style={{
+                  width: `${colWidth}px`,
+                  backgroundColor: `${customColor}05`, // Fondo sutil coloreado
+                }}
+                className="shrink-0 border-r border-rose-gold-200/80 relative"
               >
                 {/* 30-min Drop Target Rows */}
                 {TIME_SLOTS.map((time) => (
@@ -247,10 +423,10 @@ export const AgendaView: React.FC = () => {
                     onClick={() => {
                       setIsNewAppointmentOpen(true);
                     }}
-                    className="h-[40px] border-b border-rose-gold-100/60 hover:bg-rose-gold-50/50 transition-colors cursor-pointer group flex items-center justify-end px-2"
+                    className="h-[40px] border-b border-rose-gold-100/60 hover:bg-rose-gold-50/70 transition-colors cursor-pointer group flex items-center justify-end px-2"
                     title={`Click para agendar en ${col.name || col.first_name} a las ${time}`}
                   >
-                    <span className="opacity-0 group-hover:opacity-100 text-[10px] text-rose-gold-500 font-medium">
+                    <span className="opacity-0 group-hover:opacity-100 text-[10px] text-rose-gold-600 font-bold">
                       + Agendar
                     </span>
                   </div>
@@ -263,10 +439,10 @@ export const AgendaView: React.FC = () => {
 
                   // Status Badges
                   const statusColors: Record<string, string> = {
-                    scheduled: 'border-l-rose-gold-500 bg-gradient-to-br from-white to-rose-gold-50/70',
-                    confirmed: 'border-l-emerald-500 bg-gradient-to-br from-white to-emerald-50/70',
-                    in_progress: 'border-l-amber-500 bg-gradient-to-br from-white to-amber-50/70',
-                    completed: 'border-l-sky-500 bg-gradient-to-br from-white to-sky-50/70 opacity-80',
+                    scheduled: 'border-l-rose-gold-500 bg-gradient-to-br from-white to-rose-gold-50/80',
+                    confirmed: 'border-l-emerald-500 bg-gradient-to-br from-white to-emerald-50/80',
+                    in_progress: 'border-l-amber-500 bg-gradient-to-br from-white to-amber-50/80',
+                    completed: 'border-l-sky-500 bg-gradient-to-br from-white to-sky-50/80 opacity-80',
                     cancelled: 'border-l-rose-400 bg-gradient-to-br from-white to-rose-50/50 opacity-60 line-through',
                     no_show: 'border-l-purple-400 bg-gradient-to-br from-white to-purple-50/50 opacity-60',
                   };
@@ -290,7 +466,7 @@ export const AgendaView: React.FC = () => {
                         setSelectedAppointment(appt);
                       }}
                       style={cardStyle}
-                      className={`absolute left-1 right-1 rounded-xl p-2.5 border-l-4 border shadow-soft hover:shadow-soft-md transition-all duration-150 cursor-pointer overflow-hidden z-10 flex flex-col justify-between group hover:scale-[1.01] ${
+                      className={`absolute left-1.5 right-1.5 rounded-xl p-2.5 border-l-4 border shadow-soft hover:shadow-soft-md transition-all duration-150 cursor-pointer overflow-hidden z-10 flex flex-col justify-between group hover:scale-[1.01] ${
                         statusColors[appt.status] || 'border-l-rose-gold-500 bg-white'
                       }`}
                     >
@@ -342,3 +518,4 @@ export const AgendaView: React.FC = () => {
     </div>
   );
 };
+

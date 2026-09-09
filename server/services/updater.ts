@@ -48,20 +48,45 @@ let currentDownload: DownloadProgress = {
 
 let activeDownloadReq: http.ClientRequest | null = null;
 
+const COMPILED_FALLBACK_VERSION = '1.0.7';
+
 /**
- * Lee la versión local actual desde package.json
+ * Lee la versión local actual con múltiples alternativas de resolución
+ * (Variable de entorno de Electron, package.json, version.json o fallback compilado)
  */
 export function getLocalVersion(): string {
-  try {
-    const pkgPath = path.resolve(process.cwd(), 'package.json');
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      return pkg.version || '1.0.4';
-    }
-  } catch (e) {
-    console.error('Error leyendo versión local:', e);
+  if (process.env.APP_VERSION && process.env.APP_VERSION.trim() !== '') {
+    return process.env.APP_VERSION.trim();
   }
-  return '1.0.4';
+
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'package.json'),
+    path.resolve(process.cwd(), 'version.json'),
+    path.resolve(__dirname, '../../package.json'),
+    path.resolve(__dirname, '../../version.json'),
+    path.resolve(__dirname, '../package.json'),
+    path.resolve(__dirname, '../version.json'),
+    path.resolve(__dirname, 'version.json'),
+    path.resolve((process as any).resourcesPath || '', 'app.asar/package.json'),
+    path.resolve((process as any).resourcesPath || '', 'app.asar/version.json'),
+    path.resolve((process as any).resourcesPath || '', 'app/package.json'),
+    path.resolve((process as any).resourcesPath || '', 'package.json'),
+  ];
+
+  for (const filePath of candidatePaths) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (content.version) {
+          return content.version;
+        }
+      }
+    } catch {
+      // Continuar al siguiente candidato
+    }
+  }
+
+  return COMPILED_FALLBACK_VERSION;
 }
 
 /**

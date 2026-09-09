@@ -2,7 +2,8 @@ import {
   Client, Staff, Box, Treatment, SubTreatment, Appointment,
   CartItem, BodyChart, FacialChart, InformedConsent, Product,
   CashRegisterShift, CashTransaction, StaffCommission,
-  MarketingMedia, MarketingPost, BackupItem, BackupConfig
+  MarketingMedia, MarketingPost, BackupItem, BackupConfig,
+  PaymentSurchargesConfig
 } from '../types';
 
 const API_BASE = '/api';
@@ -107,10 +108,12 @@ export const api = {
   batchImportTreatments: (items: any[]) => request<{ success: boolean; count: number; message: string }>('/treatments/batch', { method: 'POST', body: JSON.stringify({ items }) }),
 
   // Caja & Comisiones
-  getCurrentShift: () => request<CashRegisterShift & { transactions: CashTransaction[] } | null>('/cash/current-shift'),
+  getCurrentShift: () => request<(CashRegisterShift & { transactions: CashTransaction[]; total_cash?: number; total_cards?: number; total_transfers?: number }) | null>('/cash/current-shift'),
   openShift: (data: { initial_cash: number; opened_by: string; notes?: string }) => request<CashRegisterShift>('/cash/open-shift', { method: 'POST', body: JSON.stringify(data) }),
   closeShift: (id: string, data: { actual_cash: number; closed_by: string; notes?: string }) => request<CashRegisterShift>(`/cash/close-shift/${id}`, { method: 'POST', body: JSON.stringify(data) }),
   createCashTransaction: (data: any) => request<CashTransaction>('/cash/transactions', { method: 'POST', body: JSON.stringify(data) }),
+  getPaymentRules: () => request<PaymentSurchargesConfig>('/cash/payment-rules'),
+  updatePaymentRules: (config: PaymentSurchargesConfig) => request<{ success: boolean; config: PaymentSurchargesConfig }>('/cash/payment-rules', { method: 'POST', body: JSON.stringify(config) }),
   getCommissions: (params?: { staff_id?: string; period?: string }) => {
     const query = new URLSearchParams();
     if (params?.staff_id) query.append('staff_id', params.staff_id);
