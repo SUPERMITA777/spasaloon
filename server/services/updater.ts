@@ -120,7 +120,9 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
       {
         headers: {
           'User-Agent': 'Hikari-Suite-Update-Checker',
-          'Cache-Control': 'no-cache',
+          'Accept': 'application/vnd.github.v3+json, application/json, text/plain',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
         },
       },
       (res) => {
@@ -138,6 +140,10 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
         res.on('end', () => {
           try {
             const parsed = JSON.parse(data);
+            if (parsed.content && parsed.encoding === 'base64') {
+              const decoded = Buffer.from(parsed.content, 'base64').toString('utf8');
+              return resolve(JSON.parse(decoded));
+            }
             resolve(parsed);
           } catch (e: any) {
             reject(new Error(`Error parseando JSON de GitHub: ${e.message}`));
@@ -157,6 +163,8 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
   });
 }
 
+const GITHUB_API_URL = 'https://api.github.com/repos/SUPERMITA777/spasaloon/contents/version.json';
+
 /**
  * Consulta en GitHub si existe una versión más nueva que la local
  */
@@ -164,8 +172,16 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const currentVersion = getLocalVersion();
 
   try {
-    const cacheBusterUrl = `${GITHUB_RAW_URL}?_t=${Date.now()}`;
-    const remoteInfo = await fetchRemoteVersion(cacheBusterUrl, 6000);
+    let remoteInfo: RemoteVersionInfo;
+    try {
+      // 1. Intentar API directa de GitHub (0 segundos de delay de caché)
+      remoteInfo = await fetchRemoteVersion(GITHUB_API_URL, 5000);
+    } catch {
+      // 2. Fallback a raw con cache-buster
+      const cacheBusterUrl = `${GITHUB_RAW_URL}?_t=${Date.now()}`;
+      remoteInfo = await fetchRemoteVersion(cacheBusterUrl, 6000);
+    }
+
     const latestVersion = remoteInfo.version || currentVersion;
     const updateAvailable = compareVersions(latestVersion, currentVersion) > 0;
 
