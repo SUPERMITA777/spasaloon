@@ -16,7 +16,19 @@ let activeTunnelUrl: string | null = null;
 interface PendingConflict {
   id: string;
   mutationId: string;
-  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
+  entity:
+    | 'appointment'
+    | 'client'
+    | 'sub_treatment'
+    | 'treatment'
+    | 'price'
+    | 'product'
+    | 'cash_transaction'
+    | 'cash_shift'
+    | 'body_chart'
+    | 'facial_chart'
+    | 'box'
+    | 'staff';
   entityId: string;
   entityDescription: string;
   mobileData: any;
@@ -135,6 +147,33 @@ syncRouter.get('/ios-profile', (req, res) => {
     res.setHeader('Content-Type', 'application/x-apple-as-profile; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="HikariSuite.mobileconfig"');
     res.send(mobileConfigXml);
+  } catch (error: any) {
+    res.status(500).send(error.message);
+  }
+});
+
+// GET /api/sync/android-apk - Descarga del instalador de Android (APK / Paquete Autónomo)
+syncRouter.get('/android-apk', (req, res) => {
+  try {
+    const candidates = [
+      path.resolve(process.cwd(), 'public/downloads/HikariSuite.apk'),
+      path.resolve(process.cwd(), 'data/HikariSuite.apk'),
+      path.resolve(process.cwd(), 'dist/downloads/HikariSuite.apk'),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        res.setHeader('Content-Disposition', 'attachment; filename="HikariSuite.apk"');
+        return res.sendFile(p);
+      }
+    }
+
+    // Si no existe un binario .apk compilado estático, redireccionar a la instalación directa de la PWA
+    const localIp = getLocalIpAddress();
+    const port = Number(process.env.PORT) || 3100;
+    const targetUrl = activeTunnelUrl ? `${activeTunnelUrl}/mobile?install=android` : `http://${localIp}:${port}/mobile?install=android`;
+    res.redirect(targetUrl);
   } catch (error: any) {
     res.status(500).send(error.message);
   }
@@ -287,6 +326,14 @@ syncRouter.get('/snapshot', (req, res) => {
       sub_treatments: subTreatments.filter((st: any) => st.treatment_id === t.id),
     }));
 
+    // Cajas y turnos de caja
+    const cashShifts = db.prepare('SELECT * FROM cash_register_shifts WHERE deleted_at IS NULL ORDER BY opened_at DESC LIMIT 10').all();
+    const cashTransactions = db.prepare('SELECT * FROM cash_transactions WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 100').all();
+
+    // Fichas Corporales y Faciales
+    const bodyCharts = db.prepare('SELECT * FROM body_charts WHERE deleted_at IS NULL ORDER BY date DESC LIMIT 50').all();
+    const facialCharts = db.prepare('SELECT * FROM facial_charts WHERE deleted_at IS NULL ORDER BY date DESC LIMIT 50').all();
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -298,6 +345,10 @@ syncRouter.get('/snapshot', (req, res) => {
         staff,
         products,
         appointments: formattedAppts,
+        cash_shifts: cashShifts,
+        cash_transactions: cashTransactions,
+        body_charts: bodyCharts,
+        facial_charts: facialCharts,
       },
     });
   } catch (error: any) {
@@ -566,11 +617,12 @@ syncRouter.post('/batch', (req, res) => {
           const existing = db.prepare('SELECT id FROM treatments WHERE id = ?').get(entityId);
           if (!existing) {
             db.prepare(`
-              INSERT INTO treatments (id, name, description, color_code, is_active, created_at, updated_at)
-              VALUES (?, ?, ?, ?, 1, ?, ?)
+              INSERT INTO treatments (id, name, category, description, color_code, is_active, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, 1, ?, ?)
             `).run(
               entityId,
               data.name,
+              data.category || 'otro',
               data.description || null,
               data.color_code || '#D4AF37',
               data.created_at || new Date().toISOString(),
@@ -590,6 +642,212 @@ syncRouter.post('/batch', (req, res) => {
           db.prepare(`UPDATE treatments SET ${fields.join(', ')} WHERE id = ?`).run(...values);
           processedIds.push(id);
         }
+      }
+
+      // 5. GESTIÓN DE PRODUCTOS Y STOCK
+      else if (entity === 'product') {
+        if (action === 'create') {
+          const existing = db.prepare('SELECT id FROM products WHERE id = ?').get(entityId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO products (
+                id, name, category, brand, cost_price, sale_price, stock_quantity, min_stock_alert, unit, is_for_sale, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            `).run(
+              entityId,
+              data.name,
+              data.category || 'general',
+              data.brand || null,
+              data.cost_price || 0,
+              data.sale_price || 0,
+              data.stock_quantity || 0,
+              data.min_stock_alert || 5,
+              data.unit || 'unidad',
+              data.created_at || new Date().toISOString(),
+              data.updated_at || new Date().toISOString()
+            );
+          }
+          processedIds.push(id);
+        } else if (action === 'update' || action === 'update_stock') {
+          const fields: string[] = [];
+          const values: any[] = [];
+          if (data.name) { fields.push('name = ?'); values.push(data.name); }
+          if (data.sale_price !== undefined) { fields.push('sale_price = ?'); values.push(data.sale_price); }
+          if (data.cost_price !== undefined) { fields.push('cost_price = ?'); values.push(data.cost_price); }
+          if (data.stock_quantity !== undefined) { fields.push('stock_quantity = ?'); values.push(data.stock_quantity); }
+          if (data.min_stock_alert !== undefined) { fields.push('min_stock_alert = ?'); values.push(data.min_stock_alert); }
+          fields.push('updated_at = ?');
+          values.push(new Date().toISOString());
+          values.push(entityId);
+          db.prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+          processedIds.push(id);
+        }
+      }
+
+      // 6. GESTIÓN DE CAJA (MOVIMIENTOS Y TURNOS DE CAJA)
+      else if (entity === 'cash_transaction') {
+        if (action === 'create') {
+          const existing = db.prepare('SELECT id FROM cash_transactions WHERE id = ?').get(entityId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO cash_transactions (
+                id, shift_id, type, amount, payment_method, category, description, client_id, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              entityId,
+              data.shift_id,
+              data.type || 'income',
+              data.amount || 0,
+              data.payment_method || 'cash',
+              data.category || 'general',
+              data.description || '',
+              data.client_id || null,
+              data.created_at || clientTimestamp || new Date().toISOString(),
+              data.updated_at || clientTimestamp || new Date().toISOString()
+            );
+
+            // Actualizar acumulados del turno de caja
+            if (data.shift_id) {
+              if (data.type === 'income') {
+                db.prepare('UPDATE cash_register_shifts SET total_incomes = total_incomes + ?, updated_at = ? WHERE id = ?').run(
+                  data.amount || 0,
+                  new Date().toISOString(),
+                  data.shift_id
+                );
+              } else if (data.type === 'expense') {
+                db.prepare('UPDATE cash_register_shifts SET total_expenses = total_expenses + ?, updated_at = ? WHERE id = ?').run(
+                  data.amount || 0,
+                  new Date().toISOString(),
+                  data.shift_id
+                );
+              }
+            }
+          }
+          processedIds.push(id);
+        }
+      } else if (entity === 'cash_shift') {
+        if (action === 'open') {
+          const existing = db.prepare('SELECT id FROM cash_register_shifts WHERE id = ?').get(entityId);
+          if (!existing) {
+            db.prepare(`
+              INSERT INTO cash_register_shifts (id, opened_at, initial_cash, opened_by, status, notes, created_at, updated_at)
+              VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+            `).run(
+              entityId,
+              data.opened_at || new Date().toISOString(),
+              data.initial_cash || 0,
+              data.opened_by || 'Móvil',
+              data.notes || null,
+              new Date().toISOString(),
+              new Date().toISOString()
+            );
+          }
+          processedIds.push(id);
+        } else if (action === 'close') {
+          db.prepare(`
+            UPDATE cash_register_shifts SET
+              status = 'closed',
+              closed_at = ?,
+              actual_cash = ?,
+              difference = ?,
+              notes = COALESCE(?, notes),
+              updated_at = ?
+            WHERE id = ?
+          `).run(
+            data.closed_at || new Date().toISOString(),
+            data.actual_cash || 0,
+            data.difference || 0,
+            data.notes || null,
+            new Date().toISOString(),
+            entityId
+          );
+          processedIds.push(id);
+        }
+      }
+
+      // 7. FICHAS CORPORALES Y FACIALES
+      else if (entity === 'body_chart') {
+        const existing = db.prepare('SELECT id FROM body_charts WHERE id = ?').get(entityId);
+        if (existing) {
+          db.prepare(`
+            UPDATE body_charts SET
+              points_json = ?, measurements_json = ?, clinical_contraindications_json = ?, notes = ?, updated_at = ?
+            WHERE id = ?
+          `).run(
+            typeof data.points_json === 'string' ? data.points_json : JSON.stringify(data.points_json || []),
+            typeof data.measurements_json === 'string' ? data.measurements_json : JSON.stringify(data.measurements_json || {}),
+            typeof data.clinical_contraindications_json === 'string' ? data.clinical_contraindications_json : JSON.stringify(data.clinical_contraindications_json || []),
+            data.notes || '',
+            new Date().toISOString(),
+            entityId
+          );
+        } else {
+          db.prepare(`
+            INSERT INTO body_charts (
+              id, client_id, session_id, date, points_json, measurements_json, clinical_contraindications_json, notes, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            entityId,
+            data.client_id,
+            data.session_id || null,
+            data.date || new Date().toISOString().split('T')[0],
+            typeof data.points_json === 'string' ? data.points_json : JSON.stringify(data.points_json || []),
+            typeof data.measurements_json === 'string' ? data.measurements_json : JSON.stringify(data.measurements_json || {}),
+            typeof data.clinical_contraindications_json === 'string' ? data.clinical_contraindications_json : JSON.stringify(data.clinical_contraindications_json || []),
+            data.notes || '',
+            new Date().toISOString(),
+            new Date().toISOString()
+          );
+        }
+        processedIds.push(id);
+      } else if (entity === 'facial_chart') {
+        const existing = db.prepare('SELECT id FROM facial_charts WHERE id = ?').get(entityId);
+        if (existing) {
+          db.prepare(`
+            UPDATE facial_charts SET
+              skin_type = ?, phototype = ?, hydration_level = ?, sensitivity_level = ?, allergies = ?,
+              active_lesions = ?, current_skincare_routine = ?, zones_json = ?, recommended_homecare = ?, updated_at = ?
+            WHERE id = ?
+          `).run(
+            data.skin_type || 'normal',
+            data.phototype || 'III',
+            data.hydration_level || 'normal',
+            data.sensitivity_level || 'baja',
+            data.allergies || '',
+            data.active_lesions || '',
+            data.current_skincare_routine || '',
+            typeof data.zones_json === 'string' ? data.zones_json : JSON.stringify(data.zones_json || []),
+            data.recommended_homecare || '',
+            new Date().toISOString(),
+            entityId
+          );
+        } else {
+          db.prepare(`
+            INSERT INTO facial_charts (
+              id, client_id, session_id, date, skin_type, phototype, hydration_level, sensitivity_level, allergies,
+              active_lesions, current_skincare_routine, zones_json, recommended_homecare, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            entityId,
+            data.client_id,
+            data.session_id || null,
+            data.date || new Date().toISOString().split('T')[0],
+            data.skin_type || 'normal',
+            data.phototype || 'III',
+            data.hydration_level || 'normal',
+            data.sensitivity_level || 'baja',
+            data.allergies || '',
+            data.active_lesions || '',
+            data.current_skincare_routine || '',
+            typeof data.zones_json === 'string' ? data.zones_json : JSON.stringify(data.zones_json || []),
+            data.recommended_homecare || '',
+            new Date().toISOString(),
+            new Date().toISOString()
+          );
+        }
+        processedIds.push(id);
+      } else {
+        processedIds.push(id);
       }
     }
   });
@@ -619,29 +877,62 @@ syncRouter.post('/batch', (req, res) => {
 });
 
 // POST /api/sync/resolve-conflict - Resuelve una discrepancia según la elección del operador en el servidor
+// Soporta las 3 acciones oficiales: Mantener ('keep_server' | 'keep_mobile'), Modificar ('modify'), y Eliminar ('delete')
 syncRouter.post('/resolve-conflict', (req, res) => {
   const { conflictId, entity, entityId, resolution, chosenData } = req.body;
 
   try {
-    // Si viene conflictId, removerlo de la lista pendiente del servidor
+    // Remover de la lista pendiente del servidor si existía
     if (conflictId && pendingConflictsMap.has(conflictId)) {
       pendingConflictsMap.delete(conflictId);
     }
 
-    if (resolution === 'use_server') {
-      // El operador en la computadora decidió conservar los datos locales de la PC
+    // 1. OPCIÓN: MANTENER DATOS DEL SERVIDOR (DESCARTAR CAMBIO MÓVIL)
+    if (resolution === 'use_server' || resolution === 'keep_server') {
       io.emit('sync:conflict-resolved', {
         conflictId,
         entity,
         entityId,
-        resolution: 'use_server',
+        resolution: 'keep_server',
       });
       io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
-      return res.json({ success: true, message: 'Datos de la computadora conservados correctamente.' });
+      return res.json({ success: true, message: 'Datos de la computadora conservados con éxito.' });
     }
 
-    // El operador en la computadora autorizó aplicar los cambios que envió el móvil
-    if (entity === 'appointment' && chosenData) {
+    // 2. OPCIÓN: ELIMINAR O ANULAR REGISTRO
+    if (resolution === 'delete') {
+      const now = new Date().toISOString();
+      if (entity === 'appointment') {
+        db.prepare('UPDATE appointments SET status = "cancelled", updated_at = ? WHERE id = ?').run(now, entityId);
+      } else if (entity === 'client') {
+        db.prepare('UPDATE clients SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, entityId);
+      } else if (entity === 'sub_treatment' || entity === 'price') {
+        db.prepare('UPDATE sub_treatments SET is_active = 0, updated_at = ? WHERE id = ?').run(now, entityId);
+      } else if (entity === 'product') {
+        db.prepare('UPDATE products SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, entityId);
+      } else if (entity === 'cash_transaction') {
+        db.prepare('UPDATE cash_transactions SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, entityId);
+      } else if (entity === 'body_chart') {
+        db.prepare('UPDATE body_charts SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, entityId);
+      } else if (entity === 'facial_chart') {
+        db.prepare('UPDATE facial_charts SET deleted_at = ?, updated_at = ? WHERE id = ?').run(now, now, entityId);
+      }
+
+      io.emit('sync:conflict-resolved', {
+        conflictId,
+        entity,
+        entityId,
+        resolution: 'delete',
+      });
+      io.emit('data-sync-completed', { timestamp: now });
+      return res.json({ success: true, message: 'Registro eliminado o anulado correctamente en el servidor.' });
+    }
+
+    // 3. OPCIÓN: MANTENER MÓVIL O MODIFICAR MANUALMENTE POR EL OPERADOR
+    // Si resolution === 'modify' o 'use_mobile' o 'keep_mobile'
+    const finalData = chosenData || {};
+
+    if (entity === 'appointment' && finalData) {
       db.prepare(`
         UPDATE appointments SET
           start_time = COALESCE(?, start_time),
@@ -655,18 +946,18 @@ syncRouter.post('/resolve-conflict', (req, res) => {
           updated_at = ?
         WHERE id = ?
       `).run(
-        chosenData.start_time || null,
-        chosenData.end_time || null,
-        chosenData.staff_id || null,
-        chosenData.box_id || null,
-        chosenData.status || null,
-        chosenData.service_price !== undefined ? chosenData.service_price : null,
-        chosenData.deposit_amount !== undefined ? chosenData.deposit_amount : null,
-        chosenData.notes !== undefined ? chosenData.notes : null,
+        finalData.start_time || null,
+        finalData.end_time || null,
+        finalData.staff_id || null,
+        finalData.box_id || null,
+        finalData.status || null,
+        finalData.service_price !== undefined ? finalData.service_price : null,
+        finalData.deposit_amount !== undefined ? finalData.deposit_amount : null,
+        finalData.notes !== undefined ? finalData.notes : null,
         new Date().toISOString(),
         entityId
       );
-    } else if (entity === 'client' && chosenData) {
+    } else if (entity === 'client' && finalData) {
       db.prepare(`
         UPDATE clients SET
           first_name = COALESCE(?, first_name),
@@ -677,15 +968,15 @@ syncRouter.post('/resolve-conflict', (req, res) => {
           updated_at = ?
         WHERE id = ?
       `).run(
-        chosenData.first_name || null,
-        chosenData.last_name || null,
-        chosenData.phone || null,
-        chosenData.email || null,
-        chosenData.notes !== undefined ? chosenData.notes : null,
+        finalData.first_name || null,
+        finalData.last_name || null,
+        finalData.phone || null,
+        finalData.email || null,
+        finalData.notes !== undefined ? finalData.notes : null,
         new Date().toISOString(),
         entityId
       );
-    } else if ((entity === 'sub_treatment' || entity === 'price') && chosenData) {
+    } else if ((entity === 'sub_treatment' || entity === 'price') && finalData) {
       db.prepare(`
         UPDATE sub_treatments SET
           price = COALESCE(?, price),
@@ -694,9 +985,28 @@ syncRouter.post('/resolve-conflict', (req, res) => {
           updated_at = ?
         WHERE id = ?
       `).run(
-        chosenData.price !== undefined ? chosenData.price : null,
-        chosenData.name || null,
-        chosenData.duration_minutes !== undefined ? chosenData.duration_minutes : null,
+        finalData.price !== undefined ? finalData.price : null,
+        finalData.name || null,
+        finalData.duration_minutes !== undefined ? finalData.duration_minutes : null,
+        new Date().toISOString(),
+        entityId
+      );
+    } else if (entity === 'product' && finalData) {
+      db.prepare(`
+        UPDATE products SET
+          name = COALESCE(?, name),
+          sale_price = COALESCE(?, sale_price),
+          cost_price = COALESCE(?, cost_price),
+          stock_quantity = COALESCE(?, stock_quantity),
+          min_stock_alert = COALESCE(?, min_stock_alert),
+          updated_at = ?
+        WHERE id = ?
+      `).run(
+        finalData.name || null,
+        finalData.sale_price !== undefined ? finalData.sale_price : null,
+        finalData.cost_price !== undefined ? finalData.cost_price : null,
+        finalData.stock_quantity !== undefined ? finalData.stock_quantity : null,
+        finalData.min_stock_alert !== undefined ? finalData.min_stock_alert : null,
         new Date().toISOString(),
         entityId
       );
@@ -706,12 +1016,18 @@ syncRouter.post('/resolve-conflict', (req, res) => {
       conflictId,
       entity,
       entityId,
-      resolution: 'use_mobile',
-      chosenData,
+      resolution: resolution === 'modify' ? 'modify' : 'keep_mobile',
+      chosenData: finalData,
     });
     io.emit('data-sync-completed', { timestamp: new Date().toISOString() });
 
-    res.json({ success: true, message: 'Discrepancia confirmada y aplicada en el servidor.' });
+    res.json({
+      success: true,
+      message:
+        resolution === 'modify'
+          ? 'Discrepancia resuelta con valores modificados por el operador.'
+          : 'Datos del móvil confirmados y aplicados en el servidor.',
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

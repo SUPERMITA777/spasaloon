@@ -1,9 +1,9 @@
 {
-  "version": "1.0.14",
+  "version": "1.0.15",
   "appName": "Hikari Suite",
   "releaseDate": "2026-09-09",
   "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
-  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.14/Hikari.Suite.Setup.1.0.14.exe",
-  "installerFileName": "Hikari Suite Setup 1.0.14.exe",
-  "changelog": "Versión 1.0.14: Corrección crítica del sistema de auto-actualización: publicación automatizada de instaladores ejecutables en GitHub Releases, resolución dinámica de URLs de descarga con fallback inteligente y compatibilidad directa de nombres de archivo."
+  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.15/Hikari.Suite.Setup.1.0.15.exe",
+  "installerFileName": "Hikari Suite Setup 1.0.15.exe",
+  "changelog": "Versión 1.0.15: Creación de la app móvil integral para iPhone y Android con descarga directa desde PC Servidora, base de datos de respaldo offline con sincronización en caché/online, catálogo de todas las funciones del programa y panel de discrepancias para el operador (mantener, modificar y eliminar)."
 }

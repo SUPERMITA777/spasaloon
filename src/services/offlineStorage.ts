@@ -1,7 +1,19 @@
 export interface OfflineMutation {
   id: string;
-  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
-  action: 'create' | 'update' | 'delete' | 'update_price';
+  entity:
+    | 'appointment'
+    | 'client'
+    | 'sub_treatment'
+    | 'treatment'
+    | 'price'
+    | 'product'
+    | 'cash_transaction'
+    | 'cash_shift'
+    | 'body_chart'
+    | 'facial_chart'
+    | 'box'
+    | 'staff';
+  action: 'create' | 'update' | 'delete' | 'update_price' | 'update_stock' | 'open' | 'close';
   entityId: string;
   data: any;
   clientTimestamp: string;
@@ -15,11 +27,15 @@ export interface OfflineSnapshot {
   boxes: any[];
   staff: any[];
   products: any[];
+  cash_shifts: any[];
+  cash_transactions: any[];
+  body_charts: any[];
+  facial_charts: any[];
   lastSyncedAt: string;
 }
 
 const DB_NAME = 'HikariOfflineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -55,6 +71,10 @@ export const offlineStorage = {
         boxes: [],
         staff: [],
         products: [],
+        cash_shifts: [],
+        cash_transactions: [],
+        body_charts: [],
+        facial_charts: [],
         lastSyncedAt: new Date().toISOString(),
       };
 
@@ -177,8 +197,92 @@ export const offlineStorage = {
           c.id === mutation.entityId ? { ...c, ...mutation.data, updated_at: mutation.clientTimestamp } : c
         );
       }
+    } else if (mutation.entity === 'product') {
+      if (!snapshot.products) snapshot.products = [];
+      if (mutation.action === 'create') {
+        snapshot.products.push({ id: mutation.entityId, ...mutation.data });
+      } else if (mutation.action === 'update' || mutation.action === 'update_stock') {
+        snapshot.products = snapshot.products.map((p) =>
+          p.id === mutation.entityId ? { ...p, ...mutation.data } : p
+        );
+      }
+    } else if (mutation.entity === 'sub_treatment' || mutation.entity === 'price') {
+      if (mutation.action === 'update_price') {
+        snapshot.treatments = (snapshot.treatments || []).map((t) => ({
+          ...t,
+          sub_treatments: t.sub_treatments?.map((st: any) =>
+            st.id === mutation.entityId ? { ...st, price: mutation.data.price } : st
+          ),
+        }));
+      }
+    } else if (mutation.entity === 'cash_transaction') {
+      if (!snapshot.cash_transactions) snapshot.cash_transactions = [];
+      snapshot.cash_transactions.unshift({
+        id: mutation.entityId,
+        ...mutation.data,
+        created_at: mutation.clientTimestamp,
+      });
+    } else if (mutation.entity === 'cash_shift') {
+      if (!snapshot.cash_shifts) snapshot.cash_shifts = [];
+      if (mutation.action === 'open') {
+        snapshot.cash_shifts.unshift({
+          id: mutation.entityId,
+          ...mutation.data,
+          status: 'open',
+          created_at: mutation.clientTimestamp,
+        });
+      } else if (mutation.action === 'close') {
+        snapshot.cash_shifts = snapshot.cash_shifts.map((s) =>
+          s.id === mutation.entityId ? { ...s, ...mutation.data, status: 'closed' } : s
+        );
+      }
+    } else if (mutation.entity === 'body_chart') {
+      if (!snapshot.body_charts) snapshot.body_charts = [];
+      const idx = snapshot.body_charts.findIndex((b) => b.id === mutation.entityId);
+      if (idx >= 0) {
+        snapshot.body_charts[idx] = { ...snapshot.body_charts[idx], ...mutation.data };
+      } else {
+        snapshot.body_charts.unshift({ id: mutation.entityId, ...mutation.data });
+      }
+    } else if (mutation.entity === 'facial_chart') {
+      if (!snapshot.facial_charts) snapshot.facial_charts = [];
+      const idx = snapshot.facial_charts.findIndex((f) => f.id === mutation.entityId);
+      if (idx >= 0) {
+        snapshot.facial_charts[idx] = { ...snapshot.facial_charts[idx], ...mutation.data };
+      } else {
+        snapshot.facial_charts.unshift({ id: mutation.entityId, ...mutation.data });
+      }
     }
 
     await offlineStorage.saveSnapshot(snapshot);
+  },
+
+  // Exportar base de datos local completa a formato JSON
+  exportBackupJson: async (): Promise<string> => {
+    const snapshot = await offlineStorage.getSnapshot();
+    const mutations = await offlineStorage.getPendingMutations();
+    const backupObj = {
+      app: 'Hikari Suite Mobile',
+      version: '1.0.15',
+      exportedAt: new Date().toISOString(),
+      snapshot: snapshot || {},
+      pendingMutations: mutations || [],
+    };
+    return JSON.stringify(backupObj, null, 2);
+  },
+
+  // Descargar archivo de respaldo JSON directamente al almacenamiento del teléfono
+  downloadBackupJson: async (): Promise<void> => {
+    const jsonStr = await offlineStorage.exportBackupJson();
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `HikariSuite_Respaldo_Movil_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };

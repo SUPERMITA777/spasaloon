@@ -3,7 +3,19 @@ import { offlineStorage, OfflineMutation } from './offlineStorage';
 export interface SyncConflict {
   id?: string;
   mutationId: string;
-  entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price';
+  entity:
+    | 'appointment'
+    | 'client'
+    | 'sub_treatment'
+    | 'treatment'
+    | 'price'
+    | 'product'
+    | 'cash_transaction'
+    | 'cash_shift'
+    | 'body_chart'
+    | 'facial_chart'
+    | 'box'
+    | 'staff';
   entityId: string;
   entityDescription: string;
   mobileData: any;
@@ -186,8 +198,20 @@ class SyncService {
 
   // Registrar acción offline y sincronizar si hay conexión
   public async recordOfflineAction(
-    entity: 'appointment' | 'client' | 'sub_treatment' | 'treatment' | 'price',
-    action: 'create' | 'update' | 'delete' | 'update_price',
+    entity:
+      | 'appointment'
+      | 'client'
+      | 'sub_treatment'
+      | 'treatment'
+      | 'price'
+      | 'product'
+      | 'cash_transaction'
+      | 'cash_shift'
+      | 'body_chart'
+      | 'facial_chart'
+      | 'box'
+      | 'staff',
+    action: 'create' | 'update' | 'delete' | 'update_price' | 'update_stock' | 'open' | 'close',
     entityId: string,
     data: any
   ) {
@@ -209,14 +233,17 @@ class SyncService {
     }
   }
 
-  // Resolver discrepancia con la decisión del operador
+  // Resolver discrepancia con la decisión del operador (Mantener, Modificar, Eliminar)
   public async resolveConflict(
     conflict: SyncConflict,
-    resolution: 'use_mobile' | 'use_server',
+    resolution: 'keep_server' | 'keep_mobile' | 'use_server' | 'use_mobile' | 'modify' | 'delete',
     customData?: any
   ): Promise<boolean> {
     try {
-      const chosenData = resolution === 'use_mobile' ? conflict.mobileData : customData || conflict.serverData;
+      const chosenData =
+        resolution === 'keep_mobile' || resolution === 'use_mobile'
+          ? conflict.mobileData
+          : customData || conflict.serverData;
 
       const res = await fetch('/api/sync/resolve-conflict', {
         method: 'POST',

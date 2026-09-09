@@ -43,10 +43,12 @@ export const App: React.FC = () => {
     setIsNewAppointmentOpen,
     isMobileQrModalOpen,
     setIsMobileQrModalOpen,
+    conflicts,
+    setConflicts,
+    isConflictModalOpen,
+    setIsConflictModalOpen,
     addToast,
   } = useApp();
-
-  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
 
   // Escuchar y gestionar confirmación de conflictos en el servidor central
   useEffect(() => {

@@ -17,6 +17,8 @@ import {
   ChevronRight,
   Database,
   Power,
+  AlertTriangle,
+  Smartphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -31,7 +33,17 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onCheckUpdates }) => {
-  const { activeTab, setActiveTab, setIsStaffQrModalOpen, appointments, products, closeSystem } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    setIsStaffQrModalOpen,
+    setIsMobileQrModalOpen,
+    appointments,
+    products,
+    closeSystem,
+    conflicts,
+    setIsConflictModalOpen,
+  } = useApp();
   const [isShutdownModalOpen, setIsShutdownModalOpen] = React.useState<boolean>(false);
 
   // Contar alertas
@@ -127,26 +139,73 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCheckUpdates }) => {
         })}
       </nav>
 
-      {/* QR Móvil para Profesionales Button */}
-      <div className="p-3 border-t border-rose-gold-100">
+      {/* Botones Móviles y Discrepancias */}
+      <div className="p-3 border-t border-rose-gold-100 space-y-2">
+        {/* Banner de Discrepancias / Conflictos */}
+        {conflicts.length > 0 && (
+          <button
+            onClick={() => setIsConflictModalOpen(true)}
+            className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white text-left transition-all duration-200 shadow-md group animate-pulse"
+            title="Resolver discrepancias entre datos del servidor y la app móvil"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-100 shrink-0" />
+              <div>
+                <div className="text-xs font-bold leading-tight">
+                  {conflicts.length} {conflicts.length === 1 ? 'Discrepancia' : 'Discrepancias'}
+                </div>
+                <div className="text-[10px] text-amber-100">
+                  Decidir: Servidor vs Móvil
+                </div>
+              </div>
+            </div>
+            <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full">
+              Resolver
+            </span>
+          </button>
+        )}
+
+        {/* App Móvil Completa (iPhone / Android) */}
         <button
-          onClick={() => setIsStaffQrModalOpen(true)}
-          className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-rose-gold-100 to-rose-blush-100 border border-rose-gold-200 text-left hover:shadow-soft transition-all duration-200 group"
+          onClick={() => setIsMobileQrModalOpen(true)}
+          className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-gradient-to-r from-rose-blush-50 to-rose-gold-50 border border-rose-gold-200 text-left hover:shadow-soft transition-all duration-200 group"
         >
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-white shadow-sm text-rose-gold-600 group-hover:scale-105 transition-transform">
-              <QrCode className="w-4 h-4" />
+              <Smartphone className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-semibold text-graphite-900 leading-tight">
-                Acceso QR Móvil
+              <div className="text-xs font-semibold text-graphite-900 leading-tight flex items-center gap-1.5">
+                <span>App Celular</span>
+                <span className="text-[9px] bg-rose-gold-500 text-white px-1.5 py-0.2 rounded-full font-bold">Offline</span>
               </div>
               <div className="text-[10px] text-rose-gold-600">
-                Agenda del staff en celular
+                Descargar iPhone / Android
               </div>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-rose-gold-400 group-hover:translate-x-0.5 transition-transform" />
+        </button>
+
+        {/* Portal Personal Staff */}
+        <button
+          onClick={() => setIsStaffQrModalOpen(true)}
+          className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-silk-100 hover:bg-silk-200/80 border border-rose-gold-200/60 text-left transition-all duration-200 group"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-xl bg-white shadow-xs text-graphite-600 group-hover:scale-105 transition-transform">
+              <QrCode className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <div className="text-xs font-medium text-graphite-800 leading-tight">
+                Portal Personal
+              </div>
+              <div className="text-[10px] text-graphite-500">
+                Agenda diaria staff
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="w-3.5 h-3.5 text-graphite-400 group-hover:translate-x-0.5 transition-transform" />
         </button>
 
         {/* Offline Badge */}

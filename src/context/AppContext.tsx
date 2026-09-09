@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Client, Staff, Box, Treatment, Appointment, Product, CashRegisterShift } from '../types';
 import { api } from '../services/api';
 import { getSocket } from '../services/socket';
+import { SyncConflict } from '../services/syncService';
 
 export type NavigationTab = 
   | 'agenda'
@@ -50,6 +51,10 @@ interface AppContextType {
   setIsStaffQrModalOpen: (open: boolean) => void;
   isMobileQrModalOpen: boolean;
   setIsMobileQrModalOpen: (open: boolean) => void;
+  conflicts: SyncConflict[];
+  setConflicts: React.Dispatch<React.SetStateAction<SyncConflict[]>>;
+  isConflictModalOpen: boolean;
+  setIsConflictModalOpen: (open: boolean) => void;
   closeSystem: () => Promise<void>;
 }
 
@@ -78,6 +83,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState<boolean>(false);
   const [isStaffQrModalOpen, setIsStaffQrModalOpen] = useState<boolean>(false);
   const [isMobileQrModalOpen, setIsMobileQrModalOpen] = useState<boolean>(false);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
+
+  // Escuchar y sincronizar discrepancias en el servidor
+  useEffect(() => {
+    fetch('/api/sync/pending-conflicts')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.conflicts)) {
+          setConflicts(data.conflicts);
+        }
+      })
+      .catch(() => {});
+
+    const socket = getSocket();
+    const handleConflict = (payload: { conflicts: SyncConflict[] }) => {
+      if (payload?.conflicts) {
+        setConflicts(payload.conflicts);
+        if (payload.conflicts.length > 0) {
+          setIsConflictModalOpen(true);
+        }
+      }
+    };
+    const handleResolved = () => {
+      fetch('/api/sync/pending-conflicts')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.conflicts)) {
+            setConflicts(data.conflicts);
+          }
+        })
+        .catch(() => {});
+    };
+
+    socket.on('sync:conflict-detected', handleConflict);
+    socket.on('sync:conflict-resolved', handleResolved);
+
+    return () => {
+      socket.off('sync:conflict-detected', handleConflict);
+      socket.off('sync:conflict-resolved', handleResolved);
+    };
+  }, []);
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -224,6 +271,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsStaffQrModalOpen,
         isMobileQrModalOpen,
         setIsMobileQrModalOpen,
+        conflicts,
+        setConflicts,
+        isConflictModalOpen,
+        setIsConflictModalOpen,
         closeSystem,
       }}
     >

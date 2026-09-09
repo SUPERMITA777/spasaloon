@@ -11,6 +11,7 @@ import {
   Wifi,
   Smartphone,
   QrCode,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -22,6 +23,8 @@ export const Header: React.FC = () => {
     networkInfo,
     setIsStaffQrModalOpen,
     setIsMobileQrModalOpen,
+    conflicts,
+    setIsConflictModalOpen,
   } = useApp();
 
   // Cambiar fecha
@@ -111,6 +114,18 @@ export const Header: React.FC = () => {
           >
             <Smartphone className="w-3.5 h-3.5 text-rose-gold-600" />
             <span className="font-semibold">Portal Personal</span>
+          </button>
+        )}
+
+        {/* Discrepancies Resolution Badge / Button */}
+        {conflicts.length > 0 && (
+          <button
+            onClick={() => setIsConflictModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl text-xs bg-amber-500 hover:bg-amber-600 text-white border border-amber-600 transition-all font-bold shadow-md animate-pulse"
+            title={`${conflicts.length} discrepancias pendientes entre el servidor y la app móvil`}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span>{conflicts.length} Discrepancia{conflicts.length > 1 ? 's' : ''}</span>
           </button>
         )}
 

@@ -14,6 +14,7 @@ import {
   Radio,
   ShieldCheck,
   Zap,
+  Download,
 } from 'lucide-react';
 
 interface Props {
@@ -319,6 +320,37 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     title="Abrir en navegador"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Descargas directas desde la PC Servidora */}
+                <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2 border-t border-rose-gold-100">
+                  <button
+                    type="button"
+                    onClick={() => window.open('/api/sync/android-apk', '_blank')}
+                    className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-xs transition-colors"
+                    title="Descargar paquete de instalación Android APK directamente desde esta PC"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Descargar APK Android</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open('/api/sync/ios-profile', '_blank')}
+                    className="px-2.5 py-1 rounded-xl bg-graphite-800 hover:bg-graphite-900 text-white font-bold text-[10px] flex items-center gap-1 shadow-xs transition-colors"
+                    title="Descargar perfil de instalación de pantalla completa para iPhone (.mobileconfig)"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Perfil iOS (.mobileconfig)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open('/mobile?install=1', '_blank')}
+                    className="px-2.5 py-1 rounded-xl bg-rose-gold-100 hover:bg-rose-gold-200 text-rose-gold-800 border border-rose-gold-300 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                    title="Ver portal de descarga interactivo con instrucciones paso a paso"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Portal de Descarga</span>
                   </button>
                 </div>
               </div>
