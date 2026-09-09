@@ -90,15 +90,26 @@ export function getLocalVersion(): string {
 }
 
 /**
- * Compara dos versiones semánticas (ej. "1.0.3" vs "1.0.2")
+ * Normaliza versiones para evitar trampas semánticas con builds experimentales pasados
+ * (ej. 1.1.0 que fue un salto erróneo de 1.0.10, y 1.1.1 que fue una prueba)
+ */
+function normalizeVersionParts(v: string): number[] {
+  const clean = v.replace(/^v/, '').trim();
+  if (clean === '1.1.0') return [1, 0, 10];
+  if (clean === '1.1.1') return [1, 0, 12];
+  return clean.split('.').map(Number);
+}
+
+/**
+ * Compara dos versiones de Hikari Suite
  * Retorna:
- *  1 si v1 > v2
+ *  1 si v1 > v2 (hay actualización)
  * -1 si v1 < v2
  *  0 si son iguales
  */
 export function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number);
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number);
+  const parts1 = normalizeVersionParts(v1);
+  const parts2 = normalizeVersionParts(v2);
 
   const len = Math.max(parts1.length, parts2.length);
   for (let i = 0; i < len; i++) {
@@ -111,11 +122,13 @@ export function compareVersions(v1: string, v2: string): number {
 }
 
 /**
- * Realiza la petición HTTP a GitHub con timeout para no bloquear
+ * Realiza la petición HTTP a GitHub / CDN con timeout para no bloquear
  */
 function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersionInfo> {
   return new Promise((resolve, reject) => {
-    const req = https.get(
+    const isHttps = url.startsWith('https');
+    const client = isHttps ? https : http;
+    const req = client.get(
       url,
       {
         headers: {
@@ -130,7 +143,7 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
           return reject(new Error('El archivo de versión aún no está publicado en la rama main de GitHub.'));
         }
         if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-          return reject(new Error(`Respuesta del servidor GitHub HTTP ${res.statusCode}`));
+          return reject(new Error(`Respuesta del servidor HTTP ${res.statusCode}`));
         }
 
         let data = '';
@@ -146,7 +159,7 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
             }
             resolve(parsed);
           } catch (e: any) {
-            reject(new Error(`Error parseando JSON de GitHub: ${e.message}`));
+            reject(new Error(`Error parseando JSON: ${e.message}`));
           }
         });
       }
@@ -154,7 +167,7 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
 
     req.setTimeout(timeoutMs, () => {
       req.destroy();
-      reject(new Error('Tiempo de espera agotado al consultar GitHub.'));
+      reject(new Error('Tiempo de espera agotado al consultar versión remota.'));
     });
 
     req.on('error', (err) => {
@@ -164,9 +177,14 @@ function fetchRemoteVersion(url: string, timeoutMs = 5000): Promise<RemoteVersio
 }
 
 const GITHUB_API_URL = 'https://api.github.com/repos/SUPERMITA777/spasaloon/contents/version.json';
+const JSDELIVR_CDN_URL = 'https://cdn.jsdelivr.net/gh/SUPERMITA777/spasaloon@main/version.json';
 
 /**
- * Consulta en GitHub si existe una versión más nueva que la local
+ * Consulta en GitHub / CDN si existe una versión más nueva que la local
+ * Implementa estrategia de triple redundancia:
+ * 1. GitHub REST API (directo, 0s delay)
+ * 2. jsDelivr CDN (alta velocidad global, anti 503)
+ * 3. GitHub Raw (fallback con cache-buster)
  */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const currentVersion = getLocalVersion();
@@ -174,12 +192,18 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   try {
     let remoteInfo: RemoteVersionInfo;
     try {
-      // 1. Intentar API directa de GitHub (0 segundos de delay de caché)
+      // 1. Intentar API directa de GitHub (0s delay de caché)
       remoteInfo = await fetchRemoteVersion(GITHUB_API_URL, 5000);
     } catch {
-      // 2. Fallback a raw con cache-buster
-      const cacheBusterUrl = `${GITHUB_RAW_URL}?_t=${Date.now()}`;
-      remoteInfo = await fetchRemoteVersion(cacheBusterUrl, 6000);
+      try {
+        // 2. Intentar jsDelivr CDN con cache-buster (inmune a errores de Fastly en GitHub Raw)
+        const cdnUrl = `${JSDELIVR_CDN_URL}?_t=${Date.now()}`;
+        remoteInfo = await fetchRemoteVersion(cdnUrl, 5000);
+      } catch {
+        // 3. Fallback a GitHub Raw
+        const cacheBusterUrl = `${GITHUB_RAW_URL}?_t=${Date.now()}`;
+        remoteInfo = await fetchRemoteVersion(cacheBusterUrl, 6000);
+      }
     }
 
     const latestVersion = remoteInfo.version || currentVersion;
@@ -196,7 +220,6 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       releaseDate: remoteInfo.releaseDate,
     };
   } catch (error: any) {
-    // Si la repo aún no tiene el commit o no hay internet, no interrumpir la experiencia
     return {
       updateAvailable: false,
       currentVersion,

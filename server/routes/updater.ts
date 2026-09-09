@@ -15,7 +15,7 @@ updaterRouter.get('/check-updates', async (req, res) => {
   try {
     const result = await checkForUpdates();
     res.json({
-      success: true,
+      success: !result.error,
       ...result,
     });
   } catch (error: any) {

@@ -101,7 +101,13 @@ export const App: React.FC = () => {
     try {
       addToast({ type: 'info', title: 'Buscando actualizaciones...' });
       const res = await api.checkUpdates();
-      if (res.success && res.updateAvailable) {
+      if (res.error || !res.success) {
+        addToast({
+          type: 'error',
+          title: 'Error de Conexión al Actualizador',
+          message: res.error || 'No se pudo contactar al servidor de versiones. Verifica tu conexión a internet.',
+        });
+      } else if (res.updateAvailable) {
         setUpdateInfo(res);
         setIsUpdateModalOpen(true);
       } else {
