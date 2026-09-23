@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Zap,
   Download,
+  AlertCircle,
 } from 'lucide-react';
 
 interface Props {
@@ -26,7 +27,7 @@ interface Props {
 export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [tunnelLoading, setTunnelLoading] = useState<boolean>(false);
-  const [connectionMode, setConnectionMode] = useState<'local' | 'remote'>('local');
+  const [connectionMode, setConnectionMode] = useState<'turso' | 'local' | 'remote'>('turso');
   const [platformTab, setPlatformTab] = useState<'ios' | 'android'>('ios');
   const [copied, setCopied] = useState<boolean>(false);
 
@@ -40,6 +41,14 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
     remoteMobileUrl: string | null;
     remoteQrCodeDataUrl: string | null;
     pendingConflictsCount?: number;
+    turso?: {
+      isConfigured: boolean;
+      salonName: string;
+      status: string;
+      lastSyncAt: string | null;
+      mobileUrl: string | null;
+      qrCodeDataUrl: string | null;
+    };
   } | null>(null);
 
   useEffect(() => {
@@ -55,8 +64,12 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
       const data = await res.json();
       if (data.success) {
         setInfo(data);
-        if (data.isTunnelActive) {
+        if (data.turso?.isConfigured) {
+          setConnectionMode('turso');
+        } else if (data.isTunnelActive) {
           setConnectionMode('remote');
+        } else {
+          setConnectionMode('local');
         }
       }
     } catch (e) {
@@ -85,12 +98,16 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const activeUrl =
-    connectionMode === 'remote'
+    connectionMode === 'turso'
+      ? info?.turso?.mobileUrl || info?.localMobileUrl || ''
+      : connectionMode === 'remote'
       ? info?.remoteMobileUrl || ''
       : info?.localMobileUrl || '';
 
   const activeQr =
-    connectionMode === 'remote'
+    connectionMode === 'turso'
+      ? info?.turso?.qrCodeDataUrl
+      : connectionMode === 'remote'
       ? info?.remoteQrCodeDataUrl
       : info?.localQrCodeDataUrl;
 
@@ -147,33 +164,91 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
       </div>
 
         <div className="p-5 space-y-4 overflow-y-auto max-h-[82vh] bg-silk-50/40">
-          {/* Selector de Modo de Conexión: Mismo Wi-Fi vs Remoto por Internet */}
-          <div className="p-1.5 bg-silk-200 rounded-2xl border border-rose-gold-200 flex gap-1 shadow-inner">
+          {/* Selector de Modo de Conexión: Nube Turso vs Wi-Fi Local vs Túnel Remoto */}
+          <div className="p-1.5 bg-silk-200 rounded-2xl border border-rose-gold-200 flex flex-wrap sm:flex-nowrap gap-1 shadow-inner">
+            <button
+              type="button"
+              onClick={() => setConnectionMode('turso')}
+              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 text-xs ${
+                connectionMode === 'turso'
+                  ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-md'
+                  : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
+              }`}
+            >
+              <Cloud className="w-4 h-4 shrink-0" />
+              <span>☁️ Nube Turso (Autónoma 24/7)</span>
+              {info?.turso?.isConfigured && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setConnectionMode('local')}
-              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-xs ${
+              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 text-xs ${
                 connectionMode === 'local'
                   ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-md'
                   : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
               }`}
             >
               <Wifi className="w-4 h-4 shrink-0" />
-              <span>Mismo Wi-Fi Local (Recomendado)</span>
+              <span>Mismo Wi-Fi Local</span>
             </button>
+
             <button
               type="button"
               onClick={() => setConnectionMode('remote')}
-              className={`flex-1 py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-xs ${
+              className={`py-2.5 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 text-xs ${
                 connectionMode === 'remote'
                   ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-md'
                   : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
               }`}
             >
               <Globe className="w-4 h-4 shrink-0" />
-              <span>A Distancia (Internet / 4G / 5G)</span>
+              <span>Túnel Remoto</span>
             </button>
           </div>
+
+          {/* Banner explicativo de Nube Turso */}
+          {connectionMode === 'turso' && (
+            info?.turso?.isConfigured ? (
+              <div className="p-3.5 bg-gradient-to-r from-rose-blush-50 to-silk-100 rounded-2xl border border-rose-gold-200 flex items-start gap-3 shadow-xs">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0 mt-1" />
+                <div className="space-y-1">
+                  <div className="font-bold text-graphite-900 text-[11px] flex items-center gap-2 flex-wrap">
+                    <span>Base de Datos del Salón: <strong className="text-rose-gold-900">{info.turso.salonName}</strong></span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                      CONEXIÓN AUTOMÁTICA
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-graphite-600 leading-relaxed">
+                    ✦ Al escanear este QR con tu iPhone, Safari abrirá la app y <strong>configurará la base de datos de tu salón automáticamente</strong>. Podrás ver y cargar turnos las 24 hs por 4G/5G, <strong>incluso si la PC del salón está apagada</strong>.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-amber-900 text-xs">
+                      Base de Datos en la Nube no configurada
+                    </h4>
+                    <p className="text-[10px] text-amber-700 mt-0.5 leading-snug">
+                      Para que el QR vincule el celular automáticamente y funcione 24/7 con la PC apagada, ingresa tu base de datos gratuita de Turso en Ajustes.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] shrink-0 shadow-xs"
+                >
+                  Ir a Ajustes
+                </button>
+              </div>
+            )
+          )}
 
           {/* Banner explicativo del modo Wi-Fi Local */}
           {connectionMode === 'local' && (
@@ -253,7 +328,11 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <div className="flex items-center gap-1.5 text-rose-gold-800 font-bold uppercase tracking-wider text-[11px]">
               <QrCode className="w-4 h-4 text-rose-gold-600" />
               <span>
-                {connectionMode === 'remote'
+                {connectionMode === 'turso'
+                  ? (info?.turso?.isConfigured
+                      ? `Escanea para Vincular Automáticamente (${info?.turso?.salonName})`
+                      : 'Configuración de Nube Requerida')
+                  : connectionMode === 'remote'
                   ? 'Escanea para Conectar a Distancia (4G / 5G)'
                   : 'Escanea conectado al Wi-Fi del Salón'}
               </span>
@@ -265,6 +344,24 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <span className="text-graphite-600 text-xs font-medium">
                   {tunnelLoading ? 'Iniciando enlace Cloudflare...' : 'Generando QR...'}
                 </span>
+              </div>
+            ) : connectionMode === 'turso' && !info?.turso?.isConfigured ? (
+              <div className="w-64 h-64 p-5 flex flex-col items-center justify-center text-center gap-3 bg-silk-100/70 rounded-2xl border-2 border-dashed border-rose-gold-300">
+                <Cloud className="w-10 h-10 text-rose-gold-500/80" />
+                <div>
+                  <h4 className="font-bold text-graphite-800 text-xs">Sin Nube Configurada</h4>
+                  <p className="text-[10px] text-graphite-500 mt-1 leading-relaxed">
+                    Ingresa en Ajustes &gt; Copias de Seguridad para activar tu base de datos gratuita de Turso en minutos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mt-1 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white font-bold text-xs shadow-md hover:from-rose-gold-700 hover:to-rose-gold-800 flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Configurar en Ajustes</span>
+                </button>
               </div>
             ) : connectionMode === 'remote' && !info?.isTunnelActive ? (
               <div className="w-64 h-64 p-5 flex flex-col items-center justify-center text-center gap-3 bg-silk-100/70 rounded-2xl border-2 border-dashed border-rose-gold-300">
@@ -296,6 +393,12 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             ) : (
               <div className="p-8 text-rose-600 font-semibold text-xs">
                 No se pudo generar el código QR.
+              </div>
+            )}
+
+            {connectionMode === 'turso' && info?.turso?.isConfigured && (
+              <div className="text-[11px] text-rose-gold-900 bg-rose-blush-50 px-3.5 py-2 rounded-xl border border-rose-gold-200/80 font-medium max-w-sm">
+                ✦ <strong>Auto-vinculación Instantánea:</strong> Abre la cámara de tu iPhone y enfoca este código. Safari abrirá la app y configurará la conexión de <strong>{info?.turso?.salonName}</strong> sin pedirte claves.
               </div>
             )}
 

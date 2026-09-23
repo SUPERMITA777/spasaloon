@@ -35,13 +35,17 @@ import {
   ArrowUpRight,
   Menu,
   Download,
-  ShieldCheck,
   FileText,
   ArrowRight,
+  Cloud,
 } from 'lucide-react';
 import { HikariLogo } from '../common/HikariLogo';
 import { offlineStorage } from '../../services/offlineStorage';
 import { syncService, SyncConflict } from '../../services/syncService';
+import {
+  checkAndApplyTursoSetupFromUrl,
+  getTursoCloudConfig,
+} from '../../services/tursoMobileClient';
 import { ConflictResolutionModal } from './ConflictResolutionModal';
 import { MobileDownloadPortal } from './MobileDownloadPortal';
 
@@ -176,8 +180,28 @@ export const MobileAppView: React.FC = () => {
     (window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true);
 
+  // Detección de base de datos Nube Turso vinculada
+  const [cloudLinkedSalon, setCloudLinkedSalon] = useState<string | null>(null);
+  const [cloudSetupSuccessNotice, setCloudSetupSuccessNotice] = useState<string | null>(null);
+
   // Iniciar sincronización y listeners
   useEffect(() => {
+    // 1. Detectar si la app fue abierta mediante un QR inteligente de auto-vinculación a Turso
+    const setupResult = checkAndApplyTursoSetupFromUrl();
+    if (setupResult.applied) {
+      const salon = setupResult.salonName || 'Mi Salón Hikari';
+      setCloudLinkedSalon(salon);
+      setCloudSetupSuccessNotice(salon);
+      // Ocultar notificación de éxito tras 6 segundos
+      setTimeout(() => setCloudSetupSuccessNotice(null), 6000);
+      syncService.syncNow().then(() => loadLocalData());
+    } else {
+      const existing = getTursoCloudConfig();
+      if (existing) {
+        setCloudLinkedSalon(existing.salonName);
+      }
+    }
+
     syncService.start();
 
     const unsubscribe = syncService.subscribe((status) => {
@@ -749,6 +773,21 @@ export const MobileAppView: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-silk-50 font-sans text-graphite-900 select-none overflow-hidden">
+      {/* Banner de Confirmación de Auto-Vinculación a la Nube Turso */}
+      {cloudSetupSuccessNotice && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-700 text-white px-4 py-2.5 text-xs flex items-center justify-between shadow-md shrink-0 animate-in fade-in slide-in-from-top duration-300 z-50">
+          <div className="flex items-center gap-2 font-medium">
+            <Cloud className="w-4 h-4 text-emerald-200 shrink-0" />
+            <span>
+              ✦ <strong>¡Auto-vinculación Exitosa!</strong> Conectado a la base de datos de <strong>{cloudSetupSuccessNotice}</strong>. Operando 24/7.
+            </span>
+          </div>
+          <button onClick={() => setCloudSetupSuccessNotice(null)} className="p-1 hover:bg-white/20 rounded-lg">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Top Mobile Header */}
       <header className="px-4 py-3 bg-white border-b border-rose-gold-200/70 shadow-xs flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5">
@@ -771,8 +810,17 @@ export const MobileAppView: React.FC = () => {
                   isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                 }`}
               />
-              <span className="text-[10px] text-graphite-500 font-medium">
-                {isOnline ? 'Servidor PC Online' : 'Modo Offline Autónomo'}
+              <span className="text-[10px] text-graphite-500 font-medium flex items-center gap-1">
+                {cloudLinkedSalon ? (
+                  <>
+                    <Cloud className="w-3 h-3 text-rose-gold-600" />
+                    <span>Nube: {cloudLinkedSalon}</span>
+                  </>
+                ) : isOnline ? (
+                  'Servidor PC Online'
+                ) : (
+                  'Modo Offline Autónomo'
+                )}
               </span>
             </div>
           </div>
@@ -793,7 +841,7 @@ export const MobileAppView: React.FC = () => {
             onClick={handleManualSync}
             disabled={isSyncing}
             className="p-2 rounded-xl bg-silk-100 hover:bg-silk-200 text-rose-gold-800 border border-rose-gold-200 transition-colors"
-            title="Sincronizar con la PC"
+            title="Sincronizar"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
           </button>

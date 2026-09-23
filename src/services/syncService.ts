@@ -1,4 +1,9 @@
 import { offlineStorage, OfflineMutation } from './offlineStorage';
+import {
+  isTursoCloudReady,
+  fetchTursoSnapshotDirectly,
+  pushMutationsToTursoDirectly,
+} from './tursoMobileClient';
 
 export interface SyncConflict {
   id?: string;
@@ -126,11 +131,20 @@ class SyncService {
           }
         } catch {}
         await this.syncNow();
+      } else if (isTursoCloudReady()) {
+        // Servidor local inaccesible, pero Nube Turso lista en móvil
+        this.isOnline = true;
+        await this.syncNow();
       } else {
         this.isOnline = false;
       }
     } catch {
-      this.isOnline = false;
+      if (isTursoCloudReady()) {
+        this.isOnline = true;
+        await this.syncNow();
+      } else {
+        this.isOnline = false;
+      }
     }
     this.notify();
   }
@@ -143,46 +157,67 @@ class SyncService {
       this.isSyncing = true;
       this.notify();
 
-      // 1. Enviar mutaciones pendientes del móvil al servidor
       const mutations = await offlineStorage.getPendingMutations();
       this.pendingCount = mutations.length;
 
-      if (mutations.length > 0) {
-        const lastSynced = (await offlineStorage.getSnapshot())?.lastSyncedAt;
-        const enrichedMutations = mutations.map((m) => ({
-          ...m,
-          lastSyncedAt: lastSynced,
-        }));
+      // INTENTO 1: Sincronizar vía servidor local / túnel HTTP
+      let syncedWithLocalServer = false;
+      try {
+        if (mutations.length > 0) {
+          const lastSynced = (await offlineStorage.getSnapshot())?.lastSyncedAt;
+          const enrichedMutations = mutations.map((m) => ({
+            ...m,
+            lastSyncedAt: lastSynced,
+          }));
 
-        const res = await fetch('/api/sync/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mutations: enrichedMutations }),
-        });
+          const res = await fetch('/api/sync/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mutations: enrichedMutations }),
+          });
 
-        if (res.ok) {
-          const result = await res.json();
-          if (result.success) {
-            if (result.processedIds && result.processedIds.length > 0) {
-              await offlineStorage.removeProcessedMutations(result.processedIds);
-            }
-            if (result.conflicts && result.conflicts.length > 0) {
-              this.conflicts = [...this.conflicts, ...result.conflicts];
+          if (res.ok) {
+            const result = await res.json();
+            if (result.success) {
+              if (result.processedIds && result.processedIds.length > 0) {
+                await offlineStorage.removeProcessedMutations(result.processedIds);
+              }
+              if (result.conflicts && result.conflicts.length > 0) {
+                this.conflicts = [...this.conflicts, ...result.conflicts];
+              }
             }
           }
         }
+
+        const snapRes = await fetch('/api/sync/snapshot', {
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+
+        if (snapRes.ok) {
+          const snapData = await snapRes.json();
+          if (snapData.success && snapData.data) {
+            await offlineStorage.saveSnapshot(snapData.data);
+            this.lastSyncedAt = snapData.timestamp;
+            syncedWithLocalServer = true;
+          }
+        }
+      } catch (e) {
+        // Falló el servidor local
+        syncedWithLocalServer = false;
       }
 
-      // 2. Traer snapshot fresco desde el servidor y guardar en IndexedDB
-      const snapRes = await fetch('/api/sync/snapshot', {
-        headers: { 'Cache-Control': 'no-cache' },
-      });
+      // INTENTO 2: Si el servidor local no respondió pero tenemos Turso Cloud configurado
+      if (!syncedWithLocalServer && isTursoCloudReady()) {
+        // 1. Enviar mutaciones pendientes directo a Turso Cloud
+        if (mutations.length > 0) {
+          await pushMutationsToTursoDirectly(mutations);
+        }
 
-      if (snapRes.ok) {
-        const snapData = await snapRes.json();
-        if (snapData.success && snapData.data) {
-          await offlineStorage.saveSnapshot(snapData.data);
-          this.lastSyncedAt = snapData.timestamp;
+        // 2. Traer snapshot fresco directo de Turso Cloud
+        const cloudSnapshot = await fetchTursoSnapshotDirectly();
+        if (cloudSnapshot) {
+          this.lastSyncedAt = cloudSnapshot.lastSyncedAt;
+          this.isOnline = true;
         }
       }
 

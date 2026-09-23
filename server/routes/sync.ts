@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { db } from '../db/database.js';
 import { io } from '../index.js';
 import { getLocalIpAddress } from '../services/network.js';
+import { getTursoConfig } from '../services/tursoSync.js';
 
 export const syncRouter = Router();
 
@@ -67,6 +68,34 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
       });
     }
 
+    // Configuración y QR de Nube Turso para auto-vinculación en el móvil
+    const tursoConfig = getTursoConfig();
+    const isTursoReady = !!(tursoConfig.dbUrl && tursoConfig.authToken);
+
+    let tursoMobileUrl: string | null = null;
+    let tursoQrCodeDataUrl: string | null = null;
+
+    if (isTursoReady) {
+      const payloadObj = {
+        s: tursoConfig.salonName || 'Mi Salón Hikari',
+        u: tursoConfig.dbUrl,
+        t: tursoConfig.authToken,
+        v: 1,
+      };
+      const tursoPayloadString = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
+      const baseForTurso = activeTunnelUrl ? `${activeTunnelUrl}/mobile` : localMobileUrl;
+      tursoMobileUrl = `${baseForTurso}#turso_setup=${tursoPayloadString}`;
+
+      tursoQrCodeDataUrl = await QRCode.toDataURL(tursoMobileUrl, {
+        width: 340,
+        margin: 2,
+        color: {
+          dark: '#3D241C',
+          light: '#FFFDFC',
+        },
+      });
+    }
+
     res.json({
       success: true,
       localIp,
@@ -78,6 +107,14 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
       remoteMobileUrl: activeTunnelUrl ? `${activeTunnelUrl}/mobile` : null,
       remoteQrCodeDataUrl,
       pendingConflictsCount: pendingConflictsMap.size,
+      turso: {
+        isConfigured: isTursoReady,
+        salonName: tursoConfig.salonName,
+        status: tursoConfig.status,
+        lastSyncAt: tursoConfig.lastSyncAt,
+        mobileUrl: tursoMobileUrl,
+        qrCodeDataUrl: tursoQrCodeDataUrl,
+      },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
