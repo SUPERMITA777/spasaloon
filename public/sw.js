@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hikari-suite-pwa-v1.0.20';
+const CACHE_NAME = 'hikari-suite-pwa-v1.0.21';
 const STATIC_ASSETS = [
   '/',
   '/mobile',
