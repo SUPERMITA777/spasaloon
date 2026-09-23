@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 
 export const boxesRouter = Router();
 
@@ -53,6 +54,7 @@ boxesRouter.post('/', (req, res) => {
     );
 
     const created = db.prepare(`SELECT * FROM boxes WHERE id = ?`).get(id) as any;
+    io.emit('box:updated');
     res.status(201).json({
       ...created,
       is_temporary: Boolean(created.is_temporary),
@@ -85,6 +87,7 @@ boxesRouter.put('/:id', (req, res) => {
     );
 
     const updated = db.prepare(`SELECT * FROM boxes WHERE id = ?`).get(req.params.id) as any;
+    io.emit('box:updated');
     res.json({
       ...updated,
       is_temporary: Boolean(updated.is_temporary),
@@ -100,6 +103,7 @@ boxesRouter.delete('/:id', (req, res) => {
   try {
     const now = new Date().toISOString();
     db.prepare(`UPDATE boxes SET deleted_at = ?, updated_at = ? WHERE id = ?`).run(now, now, req.params.id);
+    io.emit('box:updated');
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

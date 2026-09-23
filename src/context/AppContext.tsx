@@ -56,6 +56,7 @@ interface AppContextType {
   isConflictModalOpen: boolean;
   setIsConflictModalOpen: (open: boolean) => void;
   closeSystem: () => Promise<void>;
+  isRealtimeConnected: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -85,6 +86,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isMobileQrModalOpen, setIsMobileQrModalOpen] = useState<boolean>(false);
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState<boolean>(() => {
+    try {
+      return getSocket().connected;
+    } catch {
+      return false;
+    }
+  });
 
   // Escuchar y sincronizar discrepancias en el servidor
   useEffect(() => {
@@ -188,31 +196,127 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     refreshAppointments();
   }, [selectedDate]);
 
-  // Escuchar eventos en tiempo real vía Socket.io
+  // Escuchar eventos en tiempo real vía Socket.io para sincronización bidireccional instantánea
   useEffect(() => {
     const socket = getSocket();
+    setIsRealtimeConnected(socket.connected);
 
-    socket.on('appointment:created', (newAppt: Appointment) => {
+    const onConnect = () => setIsRealtimeConnected(true);
+    const onDisconnect = () => setIsRealtimeConnected(false);
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+
+    // 1. Turnos / Citas
+    const onApptCreated = (newAppt: Appointment) => {
       if (newAppt.start_time.startsWith(selectedDate)) {
         setAppointments((prev) => [...prev.filter((a) => a.id !== newAppt.id), newAppt]);
       }
       addToast({
         type: 'info',
         title: 'Nuevo turno agendado',
-        message: `${newAppt.client?.first_name} ${newAppt.client?.last_name} (${newAppt.sub_treatment?.name})`,
+        message: `${newAppt.client?.first_name || 'Cliente'} ${newAppt.client?.last_name || ''} (${newAppt.sub_treatment?.name || 'Servicio'})`,
       });
-    });
+    };
 
-    socket.on('appointment:updated', (updatedAppt: Appointment) => {
+    const onApptUpdated = (updatedAppt: Appointment) => {
       setAppointments((prev) => prev.map((a) => (a.id === updatedAppt.id ? updatedAppt : a)));
       if (selectedAppointment && selectedAppointment.id === updatedAppt.id) {
         setSelectedAppointment(updatedAppt);
       }
-    });
+    };
+
+    const onApptDeleted = ({ id }: { id: string }) => {
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+      if (selectedAppointment && selectedAppointment.id === id) {
+        setSelectedAppointment(null);
+      }
+    };
+
+    socket.on('appointment:created', onApptCreated);
+    socket.on('appointment:updated', onApptUpdated);
+    socket.on('appointment:deleted', onApptDeleted);
+
+    // 2. Clientes
+    const onClientChange = async () => {
+      try {
+        const c = await api.getClients();
+        setClients(c);
+      } catch (e) {}
+    };
+    socket.on('client:created', onClientChange);
+    socket.on('client:updated', onClientChange);
+    socket.on('client:deleted', onClientChange);
+    socket.on('client:batch-imported', onClientChange);
+
+    // 3. Caja & Facturación
+    const onCashChange = async () => {
+      try {
+        const shift = await api.getCurrentShift();
+        setActiveShift(shift);
+      } catch (e) {}
+    };
+    socket.on('cash:updated', onCashChange);
+    socket.on('cash:shift-opened', onCashChange);
+    socket.on('cash:shift-closed', onCashChange);
+    socket.on('cash:transaction-created', onCashChange);
+
+    // 4. Stock & Insumos
+    const onProductChange = async () => {
+      try {
+        const p = await api.getProducts();
+        setProducts(p);
+      } catch (e) {}
+    };
+    socket.on('product:created', onProductChange);
+    socket.on('product:updated', onProductChange);
+    socket.on('product:deleted', onProductChange);
+
+    // 5. Tratamientos, Boxes y Personal
+    const onTreatmentChange = async () => {
+      try {
+        const t = await api.getTreatments();
+        setTreatments(t);
+      } catch (e) {}
+    };
+    socket.on('treatment:updated', onTreatmentChange);
+
+    const onBoxChange = async () => {
+      try {
+        const b = await api.getBoxes();
+        setBoxes(b);
+      } catch (e) {}
+    };
+    socket.on('box:updated', onBoxChange);
+
+    const onStaffChange = async () => {
+      try {
+        const s = await api.getStaff();
+        setStaff(s);
+      } catch (e) {}
+    };
+    socket.on('staff:updated', onStaffChange);
 
     return () => {
-      socket.off('appointment:created');
-      socket.off('appointment:updated');
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+      socket.off('appointment:created', onApptCreated);
+      socket.off('appointment:updated', onApptUpdated);
+      socket.off('appointment:deleted', onApptDeleted);
+      socket.off('client:created', onClientChange);
+      socket.off('client:updated', onClientChange);
+      socket.off('client:deleted', onClientChange);
+      socket.off('client:batch-imported', onClientChange);
+      socket.off('cash:updated', onCashChange);
+      socket.off('cash:shift-opened', onCashChange);
+      socket.off('cash:shift-closed', onCashChange);
+      socket.off('cash:transaction-created', onCashChange);
+      socket.off('product:created', onProductChange);
+      socket.off('product:updated', onProductChange);
+      socket.off('product:deleted', onProductChange);
+      socket.off('treatment:updated', onTreatmentChange);
+      socket.off('box:updated', onBoxChange);
+      socket.off('staff:updated', onStaffChange);
     };
   }, [selectedDate, selectedAppointment]);
 
@@ -276,6 +380,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isConflictModalOpen,
         setIsConflictModalOpen,
         closeSystem,
+        isRealtimeConnected,
       }}
     >
       {children}

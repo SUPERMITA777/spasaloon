@@ -286,24 +286,24 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-graphite-900/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl max-w-2xl w-full shadow-soft-lg border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-graphite-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in">
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-2xl w-full shadow-soft-lg border border-rose-gold-200 overflow-hidden animate-slide-up sm:animate-scale-up flex flex-col max-h-[94vh] sm:max-h-[90vh]">
         {/* Header con Color del Tratamiento */}
         <div
-          className="p-5 text-white flex items-center justify-between"
+          className="p-3.5 sm:p-5 text-white flex items-center justify-between"
           style={{
             backgroundColor: appointment.treatment?.color_code || '#C59B7E',
           }}
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-white/20 backdrop-blur-md">
-              <Sparkles className="w-5 h-5" />
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 sm:p-2.5 rounded-2xl bg-white/20 backdrop-blur-md">
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <span className="text-[11px] font-semibold tracking-wider uppercase opacity-90">
+              <span className="text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase opacity-90">
                 {appointment.treatment?.name}
               </span>
-              <h2 className="text-lg font-serif font-bold leading-tight">
+              <h2 className="text-base sm:text-lg font-serif font-bold leading-tight">
                 {appointment.sub_treatment?.name}
               </h2>
             </div>
@@ -312,12 +312,12 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
             onClick={onClose}
             className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-silk-50/50">
+        <div className="p-3 sm:p-6 overflow-y-auto space-y-3 sm:space-y-6 flex-1 bg-silk-50/50">
           {/* Main Info Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-white rounded-2xl border border-rose-gold-100 shadow-sm">
@@ -564,12 +564,12 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
           </div>
         </div>
 
-        {/* Footer with Checkout Actions */}
-        <div className="p-4 bg-white border-t border-rose-gold-100 flex flex-wrap items-center justify-between gap-3">
+        {/* Footer with Checkout Actions (Sticky) */}
+        <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm p-3.5 sm:p-4 border-t border-rose-gold-100 flex flex-wrap items-center justify-between gap-2.5 shadow-soft z-10 shrink-0">
           <button
             onClick={() => handleUpdateDetails()}
             disabled={loadingAction}
-            className="px-4 py-2 rounded-xl border border-rose-gold-300 text-xs font-semibold text-graphite-700 hover:bg-silk-100 transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-rose-gold-300 text-xs font-semibold text-graphite-700 hover:bg-silk-100 transition-colors"
           >
             Guardar Notas
           </button>
@@ -578,7 +578,7 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
             <div className="flex items-center gap-2">
               <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4" />
-                Turno Finalizado y Cobrado
+                Turno Cobrado
               </span>
               <button
                 onClick={onClose}
@@ -595,18 +595,18 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-soft transition-all flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Finalizar Turno (Saldo $0)
+                Finalizar Turno ($0)
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-graphite-600 hidden sm:inline">
-                Cobrar Saldo:
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap">
+              <span className="text-xs font-semibold text-graphite-600 hidden md:inline">
+                Cobrar:
               </span>
               <button
                 onClick={() => handleOpenCheckout('cash')}
                 disabled={loadingAction}
-                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-semibold shadow-sm transition-all"
                 title="Pagar con efectivo"
               >
                 💵 Efectivo {paymentRules?.cash_discount_percent ? `(-${paymentRules.cash_discount_percent}%)` : ''}
@@ -614,7 +614,7 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
               <button
                 onClick={() => handleOpenCheckout('card_credit')}
                 disabled={loadingAction}
-                className="px-3 py-2 rounded-xl bg-rose-gold-600 hover:bg-rose-gold-700 text-white text-xs font-semibold shadow-sm transition-all"
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-rose-gold-600 hover:bg-rose-gold-700 text-white text-[11px] sm:text-xs font-semibold shadow-sm transition-all"
                 title="Pagar con tarjeta de crédito o débito"
               >
                 💳 Tarjeta
@@ -622,10 +622,10 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
               <button
                 onClick={() => handleOpenCheckout('transfer')}
                 disabled={loadingAction}
-                className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition-all"
+                className="px-2.5 sm:px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-[11px] sm:text-xs font-semibold shadow-sm transition-all"
                 title="Pagar con transferencia bancaria o Mercado Pago"
               >
-                📱 Transferencia
+                📱 Transf.
               </button>
             </div>
           )}
@@ -634,10 +634,12 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
 
       {/* Modal de Liquidación / Cobro con Recargos y Selección de Tarjeta */}
       {showCheckoutModal && (
-        <div className="fixed inset-0 z-60 bg-graphite-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col">
+        <div className="fixed inset-0 z-60 bg-graphite-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full shadow-2xl border-t sm:border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col max-h-[94vh] sm:max-h-[90vh]">
             {/* Header del Cobro */}
-            <div className="p-4 bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 text-white flex items-center justify-between">
+            <div className="p-4 bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 text-white shrink-0">
+              <div className="w-12 h-1 bg-white/30 rounded-full mx-auto mb-2 sm:hidden" />
+              <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-white/20">
                   <CreditCard className="w-5 h-5" />
@@ -656,9 +658,10 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
                 <X className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
             {/* Contenido del Cobro */}
-            <div className="p-5 space-y-4 text-xs">
+            <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto flex-1">
               {/* Selector de Medio de Pago */}
               <div>
                 <label className="text-xs font-bold text-graphite-700 block mb-2">
@@ -815,7 +818,7 @@ export const AppointmentModal: React.FC<Props> = ({ appointment, onClose }) => {
             </div>
 
             {/* Acciones del Checkout */}
-            <div className="p-4 bg-silk-50 border-t border-rose-gold-100 flex items-center justify-end gap-2.5">
+            <div className="sticky bottom-0 bg-silk-50/95 backdrop-blur-sm p-3.5 sm:p-4 border-t border-rose-gold-100 flex items-center justify-end gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowCheckoutModal(false)}

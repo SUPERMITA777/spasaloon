@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hikari-suite-pwa-v1.0.15';
+const CACHE_NAME = 'hikari-suite-pwa-v1.0.18';
 const STATIC_ASSETS = [
   '/',
   '/mobile',
@@ -31,20 +31,34 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Ignorar peticiones API para que sean atendidas por el sync engine o caigan en catch
+  // Ignorar peticiones API para que sean atendidas por el backend / sync engine
   if (url.pathname.startsWith('/api/')) {
     return;
   }
 
-  // Navegación principal (HTML)
+  // Navegación principal (HTML): Network first para obtener siempre el último bundle
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/index.html') || caches.match('/');
-      })
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match('/index.html') || caches.match('/');
+        })
     );
     return;
   }

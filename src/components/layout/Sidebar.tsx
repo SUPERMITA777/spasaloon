@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCheckUpdates }) => {
   ];
 
   return (
-    <aside className="w-64 bg-white/80 backdrop-blur-md border-r border-rose-gold-200/50 flex flex-col h-screen shrink-0 shadow-soft">
+    <aside className="hidden lg:flex w-64 bg-white/80 backdrop-blur-md border-r border-rose-gold-200/50 flex-col h-screen shrink-0 shadow-soft">
       {/* Branding Header */}
       <div className="p-4 border-b border-rose-gold-100 flex items-center justify-between">
         <div className="flex items-center gap-3">

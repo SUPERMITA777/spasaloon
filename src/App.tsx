@@ -27,6 +27,8 @@ import { ClientMobileConsentPortal } from './components/consents/ClientMobileCon
 import { MobileAppView } from './components/mobile/MobileAppView';
 import { MobileQrModal } from './components/mobile/MobileQrModal';
 import { ConflictResolutionModal } from './components/mobile/ConflictResolutionModal';
+import { MobileTabBar } from './components/layout/MobileTabBar';
+import { IosInstallPrompt } from './components/mobile/IosInstallPrompt';
 import { syncService, SyncConflict } from './services/syncService';
 import { getSocket } from './services/socket';
 
@@ -134,13 +136,9 @@ export const App: React.FC = () => {
     return <ClientMobileConsentPortal />;
   }
 
-  // Si estamos en la ruta móvil de la App sincronizable (/mobile o ?mode=mobile o #mobile)
-  const isMobileRoute =
-    window.location.pathname.startsWith('/mobile') ||
-    new URLSearchParams(window.location.search).get('mode') === 'mobile' ||
-    window.location.hash === '#mobile';
-
-  if (isMobileRoute) {
+  // Si se solicita explícitamente el portal legacy simplificado (?mode=legacy)
+  const isLegacyMobileRoute = new URLSearchParams(window.location.search).get('mode') === 'legacy';
+  if (isLegacyMobileRoute) {
     return <MobileAppView />;
   }
 
@@ -185,11 +183,13 @@ export const App: React.FC = () => {
       <Sidebar onCheckUpdates={handleManualCheckUpdates} />
 
       {/* Main App Container */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         <Header />
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden pb-14 lg:pb-0">
           {renderActiveView()}
         </main>
+        <MobileTabBar />
+        <IosInstallPrompt />
       </div>
 
       {/* Global Modals */}

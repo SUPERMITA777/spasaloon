@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 
 export const clientsRouter = Router();
 
@@ -102,6 +103,7 @@ clientsRouter.post('/', (req, res) => {
     `).run(id, first_name, last_name, phone, email || null, birth_date || null, dni || null, notes || null, profile_photo_url || null, now, now);
 
     const created = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(id);
+    io.emit('client:created', created);
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -125,6 +127,7 @@ clientsRouter.put('/:id', (req, res) => {
     }
 
     const updated = db.prepare(`SELECT * FROM clients WHERE id = ?`).get(req.params.id);
+    io.emit('client:updated', updated);
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -142,6 +145,7 @@ clientsRouter.delete('/:id', (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
+    io.emit('client:deleted', { id: req.params.id });
     res.json({ success: true, message: 'Cliente eliminado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

@@ -14,6 +14,9 @@ import {
   AlertCircle,
   GripVertical,
   RotateCcw,
+  Phone,
+  ChevronRight,
+  List,
 } from 'lucide-react';
 
 const TIME_SLOTS = [
@@ -40,7 +43,17 @@ export const AgendaView: React.FC = () => {
     addToast,
   } = useApp();
 
-  // Persistencia de la vista boxes vs staff
+  // Modo ergonómico para iPhone / móvil
+  const [mobileMode, setMobileMode] = useState<'timeline' | 'box_tab' | 'grid'>('timeline');
+  const [selectedMobileBoxId, setSelectedMobileBoxId] = useState<string>('');
+
+  useEffect(() => {
+    if (boxes.length > 0 && !selectedMobileBoxId) {
+      setSelectedMobileBoxId(boxes[0].id);
+    }
+  }, [boxes, selectedMobileBoxId]);
+
+  // Persistencia de la vista boxes vs staff en desktop
   const [viewMode, setViewMode] = useState<'boxes' | 'staff'>(() => {
     return (localStorage.getItem('hikari_agenda_view_mode') as 'boxes' | 'staff') || 'boxes';
   });
@@ -224,10 +237,82 @@ export const AgendaView: React.FC = () => {
       })
     : staff.filter((s) => s.active);
 
+  const sortedDayAppointments = [...appointments].sort((a, b) =>
+    (a.start_time || '').localeCompare(b.start_time || '')
+  );
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return { bg: 'bg-emerald-50 text-emerald-800 border-emerald-300', dot: 'bg-emerald-500', label: 'Cobrado' };
+      case 'in_progress':
+        return { bg: 'bg-amber-50 text-amber-800 border-amber-300', dot: 'bg-amber-500', label: 'En Box' };
+      case 'confirmed':
+        return { bg: 'bg-blue-50 text-blue-800 border-blue-300', dot: 'bg-blue-500', label: 'Confirmado' };
+      case 'cancelled':
+        return { bg: 'bg-rose-50 text-rose-800 border-rose-300', dot: 'bg-rose-500', label: 'Cancelado' };
+      default:
+        return { bg: 'bg-rose-gold-50 text-rose-gold-800 border-rose-gold-300', dot: 'bg-rose-gold-500', label: 'Agendado' };
+    }
+  };
+
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] bg-silk-100 overflow-hidden">
-      {/* Top Filter & View Mode Bar */}
-      <div className="px-6 py-3 bg-white/70 backdrop-blur-md border-b border-rose-gold-200/50 flex items-center justify-between shadow-2xs">
+    <div className="flex-1 flex flex-col h-full bg-silk-100 overflow-hidden">
+      {/* 1. Mobile-Specific Controls Bar (< lg) */}
+      <div className="lg:hidden px-2.5 py-1.5 bg-white/95 backdrop-blur-md border-b border-rose-gold-200/60 flex items-center justify-between gap-1.5 shadow-2xs shrink-0">
+        <div className="flex bg-silk-200 p-0.5 rounded-xl border border-rose-gold-200 shadow-inner text-[11px] font-semibold">
+          <button
+            type="button"
+            onClick={() => setMobileMode('timeline')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ${
+              mobileMode === 'timeline'
+                ? 'bg-white text-rose-gold-900 shadow-2xs font-bold'
+                : 'text-graphite-600 hover:text-graphite-900'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-rose-gold-600" />
+            <span>Día ({sortedDayAppointments.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMobileMode('box_tab')}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ${
+              mobileMode === 'box_tab'
+                ? 'bg-white text-rose-gold-900 shadow-2xs font-bold'
+                : 'text-graphite-600 hover:text-graphite-900'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-rose-gold-600" />
+            <span>Por Box</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMobileMode('grid')}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all ${
+              mobileMode === 'grid'
+                ? 'bg-white text-rose-gold-900 shadow-2xs font-bold'
+                : 'text-graphite-600 hover:text-graphite-900'
+            }`}
+          >
+            <List className="w-3.5 h-3.5 text-rose-gold-600" />
+            <span>Grilla</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsNewAppointmentOpen(true)}
+          className="px-2.5 py-1 bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 hover:from-rose-gold-700 hover:to-rose-gold-800 text-white rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1 active:scale-95"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Agendar</span>
+        </button>
+      </div>
+
+      {/* 2. Desktop Controls Bar (>= lg) */}
+      <div className="hidden lg:flex px-6 py-3 bg-white/70 backdrop-blur-md border-b border-rose-gold-200/50 items-center justify-between shadow-2xs shrink-0">
         <div className="flex items-center gap-3">
           <div className="text-xs font-semibold text-graphite-600">Visualizar por:</div>
           <div className="flex bg-silk-200 p-1 rounded-2xl border border-rose-gold-200/60 shadow-inner">
@@ -290,8 +375,227 @@ export const AgendaView: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid Container */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto flex flex-col bg-silk-50/70 select-none relative">
+      {/* ========================================================= */}
+      {/* VISTA MÓVIL 1: CRONOGRAMA DIARIO ULTRA-COMPACTO           */}
+      {/* ========================================================= */}
+      {mobileMode === 'timeline' && (
+        <div className="flex-1 overflow-y-auto p-2 sm:p-3 space-y-2 lg:hidden max-w-lg mx-auto w-full">
+          {sortedDayAppointments.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-rose-gold-300 text-graphite-500 space-y-3 mt-4">
+              <CalendarIcon className="w-10 h-10 mx-auto text-rose-gold-400 opacity-80" />
+              <div>
+                <h4 className="font-serif font-bold text-graphite-900 text-sm">
+                  Sin turnos programados para esta fecha
+                </h4>
+                <p className="text-xs text-graphite-500 mt-0.5">
+                  Aprovecha los espacios disponibles y agenda un turno.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewAppointmentOpen(true)}
+                className="px-4 py-2 bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white rounded-2xl font-bold text-xs shadow-md active:scale-95"
+              >
+                + Agendar Primer Turno
+              </button>
+            </div>
+          ) : (
+            sortedDayAppointments.map((appt) => {
+              const statusBadge = getStatusBadge(appt.status);
+              const startTimeFormatted = appt.start_time ? appt.start_time.split('T')[1].substring(0, 5) : '--:--';
+              const endTimeFormatted = appt.end_time ? appt.end_time.split('T')[1].substring(0, 5) : '--:--';
+              const balanceDue = Math.max(0, (appt.total_amount || appt.service_price || 0) - (appt.deposit_amount || 0));
+
+              return (
+                <div
+                  key={appt.id}
+                  onClick={() => setSelectedAppointment(appt)}
+                  className="bg-white rounded-2xl p-2.5 border border-rose-gold-200/90 shadow-2xs hover:shadow-soft transition-all active:scale-[0.99] cursor-pointer flex items-center justify-between gap-2.5 relative overflow-hidden"
+                >
+                  {/* Barra de acento con color del Box */}
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1.5"
+                    style={{ backgroundColor: appt.box?.color_code || '#C59B7E' }}
+                  />
+
+                  <div className="flex items-center gap-2.5 pl-1.5 min-w-0 flex-1">
+                    {/* Bloque Horario Monospace */}
+                    <div className="shrink-0 text-center bg-silk-100 px-2 py-1 rounded-xl border border-rose-gold-200/70">
+                      <div className="font-mono font-bold text-xs text-graphite-900 leading-tight">
+                        {startTimeFormatted}
+                      </div>
+                      <div className="font-mono text-[9px] text-graphite-500 leading-none mt-0.5">
+                        {endTimeFormatted}
+                      </div>
+                    </div>
+
+                    {/* Datos Cliente & Servicio */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-xs text-graphite-900 truncate">
+                          {appt.client?.first_name} {appt.client?.last_name}
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-rose-gold-800 font-medium truncate">
+                        {appt.sub_treatment?.name || 'Tratamiento'}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-graphite-500">
+                        <span
+                          className="px-1.5 py-0.2 rounded font-semibold text-[9px] border"
+                          style={{
+                            backgroundColor: `${appt.box?.color_code || '#C59B7E'}15`,
+                            color: appt.box?.color_code || '#C59B7E',
+                            borderColor: `${appt.box?.color_code || '#C59B7E'}40`,
+                          }}
+                        >
+                          {appt.box?.name || 'Box'}
+                        </span>
+                        <span>•</span>
+                        <span className="truncate">{appt.staff?.first_name || 'Staff'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Estado y Monto */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                        statusBadge.bg
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${statusBadge.dot}`} />
+                      {statusBadge.label}
+                    </span>
+                    <div className="text-right">
+                      <div className="font-bold text-xs text-graphite-900">
+                        ${(appt.total_amount || appt.service_price || 0).toLocaleString('es-AR')}
+                      </div>
+                      {balanceDue > 0 && appt.status !== 'completed' ? (
+                        <div className="text-[9px] text-amber-700 font-semibold">
+                          Resta: ${balanceDue.toLocaleString('es-AR')}
+                        </div>
+                      ) : appt.status === 'completed' ? (
+                        <div className="text-[9px] text-emerald-700 font-semibold">
+                          Pagado
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* VISTA MÓVIL 2: POR BOX INDIVIDUAL (100% ANCHO)             */}
+      {/* ========================================================= */}
+      {mobileMode === 'box_tab' && (
+        <div className="flex-1 flex flex-col overflow-hidden lg:hidden">
+          {/* Selector horizontal de boxes */}
+          <div className="flex gap-1.5 overflow-x-auto p-2 bg-silk-50 border-b border-rose-gold-200/60 shrink-0">
+            {boxes.map((b) => {
+              const isSelected = (selectedMobileBoxId || boxes[0]?.id) === b.id;
+              const boxColor = b.color_code || '#C59B7E';
+              const boxAppts = sortedDayAppointments.filter((a) => a.box_id === b.id);
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setSelectedMobileBoxId(b.id)}
+                  style={{
+                    borderColor: isSelected ? boxColor : undefined,
+                  }}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all shrink-0 ${
+                    isSelected
+                      ? 'bg-white shadow-xs text-graphite-900 border-2'
+                      : 'bg-white/70 text-graphite-600 border-rose-gold-200'
+                  }`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: boxColor }}
+                  />
+                  <span>{b.name}</span>
+                  {boxAppts.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-silk-200 text-graphite-700 font-bold">
+                      {boxAppts.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Horarios de ese box en ancho completo */}
+          <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 max-w-lg mx-auto w-full">
+            {TIME_SLOTS.map((slot) => {
+              const currentBoxId = selectedMobileBoxId || boxes[0]?.id;
+              const appt = appointments.find((a) => {
+                if (a.box_id !== currentBoxId) return false;
+                const slotHour = slot.split(':')[0];
+                const slotMin = slot.split(':')[1];
+                const apptTime = a.start_time?.split('T')[1];
+                if (!apptTime) return false;
+                const apptHour = apptTime.split(':')[0];
+                const apptMin = parseInt(apptTime.split(':')[1], 10);
+                const slotMinNum = parseInt(slotMin, 10);
+                return apptHour === slotHour && apptMin >= slotMinNum && apptMin < slotMinNum + 30;
+              });
+
+              if (appt) {
+                const statusBadge = getStatusBadge(appt.status);
+                return (
+                  <div
+                    key={slot}
+                    onClick={() => setSelectedAppointment(appt)}
+                    className="p-2.5 bg-white rounded-xl border border-rose-gold-200 shadow-2xs flex items-center justify-between gap-2 cursor-pointer hover:shadow-soft"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-xs text-rose-gold-800 bg-silk-100 px-1.5 py-1 rounded-lg">
+                        {slot}
+                      </span>
+                      <div className="min-w-0">
+                        <h5 className="font-bold text-xs text-graphite-900 truncate">
+                          {appt.client?.first_name} {appt.client?.last_name}
+                        </h5>
+                        <p className="text-[10px] text-graphite-600 truncate">
+                          {appt.sub_treatment?.name} • {appt.staff?.first_name}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusBadge.bg}`}>
+                      {statusBadge.label}
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={slot}
+                  onClick={() => setIsNewAppointmentOpen(true)}
+                  className="p-2 bg-white/60 hover:bg-white rounded-xl border border-dashed border-rose-gold-200/80 flex items-center justify-between cursor-pointer transition-colors text-xs text-graphite-400 group"
+                >
+                  <span className="font-mono text-[11px] text-graphite-500 font-semibold">{slot}</span>
+                  <span className="text-[10px] text-rose-gold-600 font-medium group-hover:underline flex items-center gap-1">
+                    <Plus className="w-3 h-3" />
+                    <span>Disponible</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* VISTA 3: GRILLA COMPLETA EXCEL (Desktop o Móvil 'grid')   */}
+      {/* ========================================================= */}
+      <div className={`flex-1 overflow-x-auto overflow-y-auto flex-col bg-silk-50/70 select-none relative ${
+        mobileMode !== 'grid' ? 'hidden lg:flex' : 'flex'
+      }`}>
         {/* Column Headers (Sticky Top) */}
         <div className="flex border-b border-rose-gold-200 bg-white sticky top-0 z-30 shadow-xs shrink-0 min-w-max">
           {/* Time Column Header - Sticky Left */}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 
 export const cashRouter = Router();
 
@@ -69,6 +70,8 @@ cashRouter.post('/open-shift', (req, res) => {
     `).run(id, now, initial_cash || 0, initial_cash || 0, opened_by || 'Admin', notes || null, now, now);
 
     const created = db.prepare(`SELECT * FROM cash_register_shifts WHERE id = ?`).get(id);
+    io.emit('cash:shift-opened', created);
+    io.emit('cash:updated');
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -98,6 +101,8 @@ cashRouter.post('/close-shift/:id', (req, res) => {
     `).run(now, total_incomes, total_expenses, expected_cash, actual_cash || expected_cash, difference, closed_by || 'Admin', notes || shift.notes, now, req.params.id);
 
     const updated = db.prepare(`SELECT * FROM cash_register_shifts WHERE id = ?`).get(req.params.id);
+    io.emit('cash:shift-closed', updated);
+    io.emit('cash:updated');
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -147,6 +152,8 @@ cashRouter.post('/transactions', (req, res) => {
     );
 
     const created = db.prepare(`SELECT * FROM cash_transactions WHERE id = ?`).get(id);
+    io.emit('cash:transaction-created', created);
+    io.emit('cash:updated');
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

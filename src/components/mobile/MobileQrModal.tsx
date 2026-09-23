@@ -105,26 +105,28 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999] bg-graphite-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in"
+      className="fixed inset-0 z-[99999] bg-graphite-950/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col my-4 text-xs relative z-10"
+        className="bg-white rounded-t-3xl sm:rounded-3xl max-w-xl w-full shadow-2xl border-t sm:border border-rose-gold-200 overflow-hidden animate-scale-up flex flex-col my-0 sm:my-4 text-xs relative z-10 max-h-[94vh] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-rose-gold-700 via-rose-gold-600 to-rose-gold-800 text-white flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-white/20 backdrop-blur-md shadow-inner">
-              <Smartphone className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-serif font-bold text-base tracking-wide">
-                  App Móvil Hikari Suite
-                </h2>
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-gold-700 via-rose-gold-600 to-rose-gold-800 text-white shrink-0">
+          <div className="w-12 h-1 bg-white/30 rounded-full mx-auto mb-2 sm:hidden" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 sm:p-2.5 rounded-2xl bg-white/20 backdrop-blur-md shadow-inner">
+                <Smartphone className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-serif font-bold text-sm sm:text-base tracking-wide">
+                    App Móvil Hikari Suite
+                  </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-mono font-bold tracking-wider uppercase">
                   Control Total
                 </span>
@@ -141,6 +143,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <X className="w-4 h-4" />
           </button>
         </div>
+      </div>
 
         <div className="p-5 space-y-4 overflow-y-auto max-h-[82vh] bg-silk-50/40">
           {/* Selector de Modo de Conexión: Mismo Wi-Fi vs Remoto por Internet */}
@@ -387,13 +390,27 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             {/* Instrucciones Paso a Paso */}
             <div className="p-4 bg-white rounded-2xl border border-rose-gold-100 space-y-2 text-[11px]">
               {platformTab === 'ios' ? (
-                <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed">
-                  <li>Apunta la <strong>Cámara de tu iPhone</strong> hacia el código QR de arriba.</li>
-                  <li>Toca el aviso emergente para abrir el enlace en <strong>Safari</strong> (abre directo, sin pantallas de bloqueo).</li>
-                  <li>En la barra inferior de Safari, toca el botón de <strong>Compartir</strong> (icono de cuadrado con flecha ⎋).</li>
-                  <li>Selecciona <strong>"Agregar a Inicio" (➕)</strong>.</li>
-                  <li>¡Listo! La aplicación se instalará en tu pantalla con su icono oficial de Hikari Suite.</li>
-                </ol>
+                <div className="space-y-2.5">
+                  <div className="p-2.5 bg-rose-gold-50/70 rounded-xl border border-rose-gold-200">
+                    <span className="font-bold text-rose-gold-900 block mb-1">
+                      ✨ Método Oficial Apple (Safari):
+                    </span>
+                    <ol className="space-y-1 text-graphite-700 list-decimal list-inside leading-relaxed">
+                      <li>Escanea el <strong>código QR</strong> con la cámara de tu iPhone y ábrelo en <strong>Safari</strong>.</li>
+                      <li>Toca el botón inferior de <strong>Compartir</strong> (icono de cuadrado con flecha hacia arriba ⎋).</li>
+                      <li>Baja un poco y selecciona <strong>"Agregar a inicio" (➕)</strong>.</li>
+                      <li>¡Listo! Se crea el icono de Hikari Suite que abre en pantalla completa nativa sin marcos.</li>
+                    </ol>
+                  </div>
+                  <div className="p-2.5 bg-silk-100 rounded-xl border border-rose-gold-200 text-graphite-700">
+                    <span className="font-bold text-graphite-900 block mb-1">
+                      🍏 Método Alternativo (Perfil WebClip Apple):
+                    </span>
+                    <p className="leading-relaxed">
+                      Toca el botón <strong>"Perfil iOS (.mobileconfig)"</strong> arriba para descargar el perfil firmado. Luego en Ajustes de iPhone pulsa <em>"Perfil descargado"</em> ➔ <em>"Instalar"</em>.
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed">
                   <li>Abre la <strong>Cámara</strong> o Google Lens y escanea el código QR de arriba.</li>

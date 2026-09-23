@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 
 export const treatmentsRouter = Router();
 
@@ -72,6 +73,7 @@ treatmentsRouter.post('/', (req, res) => {
     `).run(id, name, category || 'facial', description || null, color_code || '#C59B7E', icon_name || 'Sparkles', now, now);
 
     const created = db.prepare(`SELECT * FROM treatments WHERE id = ?`).get(id);
+    io.emit('treatment:updated');
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -91,6 +93,7 @@ treatmentsRouter.put('/:id', (req, res) => {
     `).run(name, category, description || null, color_code, icon_name, is_active ? 1 : 0, now, req.params.id);
 
     const updated = db.prepare(`SELECT * FROM treatments WHERE id = ?`).get(req.params.id);
+    io.emit('treatment:updated');
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -169,6 +172,7 @@ treatmentsRouter.put('/sub-treatments/:subId', (req, res) => {
 
     update();
     const updated = db.prepare(`SELECT * FROM sub_treatments WHERE id = ?`).get(req.params.subId);
+    io.emit('treatment:updated');
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -192,6 +196,7 @@ treatmentsRouter.delete('/:id', (req, res) => {
       UPDATE sub_treatments SET deleted_at = ?, updated_at = ? WHERE treatment_id = ? AND deleted_at IS NULL
     `).run(now, now, req.params.id);
 
+    io.emit('treatment:updated');
     res.json({ success: true, message: 'Categoría de tratamiento eliminada correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -210,6 +215,7 @@ treatmentsRouter.delete('/sub-treatments/:subId', (req, res) => {
       return res.status(404).json({ error: 'Sub-tratamiento no encontrado' });
     }
 
+    io.emit('treatment:updated');
     res.json({ success: true, message: 'Servicio eliminado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

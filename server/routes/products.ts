@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 
 export const productsRouter = Router();
 
@@ -63,6 +64,7 @@ productsRouter.post('/', (req, res) => {
 
     insert();
     const created = db.prepare(`SELECT * FROM products WHERE id = ?`).get(id);
+    io.emit('product:created', created);
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -92,6 +94,7 @@ productsRouter.post('/:id/movements', (req, res) => {
 
     execute();
     const updated = db.prepare(`SELECT * FROM products WHERE id = ?`).get(req.params.id);
+    io.emit('product:updated', updated);
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -126,6 +129,7 @@ productsRouter.put('/:id', (req, res) => {
     }
 
     const updated = db.prepare(`SELECT * FROM products WHERE id = ?`).get(req.params.id);
+    io.emit('product:updated', updated);
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -143,7 +147,7 @@ productsRouter.delete('/:id', (req, res) => {
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
-
+    io.emit('product:deleted', { id: req.params.id });
     res.json({ success: true, message: 'Producto eliminado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

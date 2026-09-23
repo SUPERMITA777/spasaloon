@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
+import { io } from '../index.js';
 import { generateQrDataUrl, getLocalIpAddress } from '../services/network.js';
 
 export const staffRouter = Router();
@@ -118,6 +119,7 @@ staffRouter.post('/', (req, res) => {
 
     insert();
     const created = db.prepare(`SELECT * FROM staff WHERE id = ?`).get(id);
+    io.emit('staff:updated');
     res.status(201).json(created);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -151,6 +153,7 @@ staffRouter.put('/:id', (req, res) => {
 
     update();
     const updated = db.prepare(`SELECT * FROM staff WHERE id = ?`).get(req.params.id);
+    io.emit('staff:updated');
     res.json(updated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -169,6 +172,7 @@ staffRouter.post('/:id/regenerate-qr', (req, res) => {
     const now = new Date().toISOString();
 
     db.prepare(`UPDATE staff SET qr_token = ?, updated_at = ? WHERE id = ?`).run(new_token, now, req.params.id);
+    io.emit('staff:updated');
     res.json({ success: true, new_token });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -187,6 +191,7 @@ staffRouter.delete('/:id', (req, res) => {
       return res.status(404).json({ error: 'Profesional no encontrado' });
     }
 
+    io.emit('staff:updated');
     res.json({ success: true, message: 'Profesional eliminado correctamente' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
