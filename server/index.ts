@@ -23,6 +23,7 @@ import { marketingRouter } from './routes/marketing.js';
 import { backupRouter } from './routes/backup.js';
 import { updaterRouter } from './routes/updater.js';
 import { syncRouter } from './routes/sync.js';
+import { cloudSyncRouter } from './routes/cloudSync.js';
 import { getBackupConfig, createBackup } from './services/backup.js';
 
 export const app = express();
@@ -60,6 +61,7 @@ app.use('/api/marketing', marketingRouter);
 app.use('/api/backup', backupRouter);
 app.use('/api/system', updaterRouter);
 app.use('/api/sync', syncRouter);
+app.use('/api/cloud-sync', cloudSyncRouter);
 
 // Ruta para cierre ordenado del sistema con backup
 app.post('/api/system/shutdown', async (req, res) => {

@@ -18,7 +18,9 @@ import {
   ExternalLink,
   Power,
   Info,
+  Cloud,
 } from 'lucide-react';
+import { CloudSyncTab } from './CloudSyncTab';
 
 declare global {
   interface Window {
@@ -48,6 +50,7 @@ export const BackupSettingsView: React.FC = () => {
   const [confirmDeleteModal, setConfirmDeleteModal] = useState<string | null>(null);
   const [isEditingFolder, setIsEditingFolder] = useState<boolean>(false);
   const [folderInput, setFolderInput] = useState<string>('');
+  const [subTab, setSubTab] = useState<'local' | 'turso'>('local');
 
   const isElectron = !!window.electronAPI?.isElectron;
 
@@ -264,19 +267,55 @@ export const BackupSettingsView: React.FC = () => {
         </div>
 
         {/* Botón de acción principal: Crear Backup Ahora */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleCreateBackup}
-            disabled={creating}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 hover:from-rose-gold-600 hover:to-rose-gold-700 text-white text-xs font-semibold shadow-soft hover:shadow-soft-md transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${creating ? 'animate-spin' : ''}`} />
-            <span>{creating ? 'Generando Copia...' : 'Crear Copia de Seguridad Ahora'}</span>
-          </button>
-        </div>
+        {subTab === 'local' && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCreateBackup}
+              disabled={creating}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 hover:from-rose-gold-600 hover:to-rose-gold-700 text-white text-xs font-semibold shadow-soft hover:shadow-soft-md transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${creating ? 'animate-spin' : ''}`} />
+              <span>{creating ? 'Generando Copia...' : 'Crear Copia de Seguridad Ahora'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Tarjeta Informativa Destacada: Restauración por Doble Clic */}
+      {/* Sub-tab selection */}
+      <div className="flex items-center gap-2 border-b border-rose-gold-200/60 pb-3">
+        <button
+          onClick={() => setSubTab('local')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+            subTab === 'local'
+              ? 'bg-rose-gold-600 text-white shadow-soft'
+              : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
+          }`}
+        >
+          <HardDrive className="w-4 h-4" />
+          <span>Copias Locales (Disco / USB)</span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('turso')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all relative ${
+            subTab === 'turso'
+              ? 'bg-rose-gold-600 text-white shadow-soft'
+              : 'text-graphite-600 hover:text-graphite-900 hover:bg-white/60'
+          }`}
+        >
+          <Cloud className="w-4 h-4" />
+          <span>☁️ Nube Turso & Acceso 4G/5G Móvil</span>
+          <span className="text-[10px] bg-emerald-500/20 text-emerald-700 border border-emerald-500/30 px-1.5 py-0.5 rounded-full font-bold">
+            LibSQL
+          </span>
+        </button>
+      </div>
+
+      {subTab === 'turso' ? (
+        <CloudSyncTab />
+      ) : (
+        <>
+          {/* Tarjeta Informativa Destacada: Restauración por Doble Clic */}
       <div className="p-5 rounded-2xl bg-gradient-to-r from-rose-blush-50 to-silk-100 border border-rose-gold-200 shadow-soft flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
           <div className="p-2.5 rounded-xl bg-rose-gold-100 text-rose-gold-700 shrink-0 mt-0.5">
@@ -567,6 +606,8 @@ export const BackupSettingsView: React.FC = () => {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* Modal de Confirmación para Restaurar */}
       {confirmRestoreModal && (

@@ -8,6 +8,7 @@ import {
   Check,
   ExternalLink,
   Wifi,
+  Cloud,
   CloudOff,
   RefreshCw,
   Globe,
@@ -441,6 +442,16 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <h4 className="font-bold text-rose-gold-950 text-[11px]">Modo Offline</h4>
                 <p className="text-[10px] text-rose-gold-800 mt-0.5 leading-snug">
                   Si no hay internet, la app sigue funcionando con los últimos datos y se sincroniza automáticamente al reconectar.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-200 flex items-start gap-2.5 sm:col-span-2">
+              <Cloud className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-amber-950 text-[11px]">☁️ Nube Turso LibSQL Sincronizada</h4>
+                <p className="text-[10px] text-amber-800 mt-0.5 leading-snug">
+                  Con la base de datos en la nube Turso configurada (en Ajustes &gt; Copias de Seguridad), tus citas y clientes se respaldan y replican en tiempo real sin límites de distancia.
                 </p>
               </div>
             </div>

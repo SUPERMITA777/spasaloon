@@ -196,5 +196,50 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ filePath }),
     }),
+
+  // Sincronización en la Nube Turso (LibSQL)
+  getCloudSyncStatus: () =>
+    request<{
+      success: boolean;
+      config: {
+        salonName: string;
+        dbUrl: string;
+        authToken: string;
+        syncEnabled: boolean;
+        lastSyncAt: string | null;
+        status: 'disconnected' | 'connected' | 'syncing' | 'error';
+        errorMessage?: string;
+      };
+    }>('/cloud-sync/status'),
+
+  saveCloudSyncConfig: (config: any) =>
+    request<{
+      success: boolean;
+      config: any;
+      message: string;
+    }>('/cloud-sync/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+
+  testCloudSync: (dbUrl?: string, authToken?: string) =>
+    request<{
+      success: boolean;
+      message: string;
+    }>('/cloud-sync/test', {
+      method: 'POST',
+      body: JSON.stringify({ dbUrl, authToken }),
+    }),
+
+  triggerCloudSync: () =>
+    request<{
+      success: boolean;
+      pushedCount: number;
+      pulledCount: number;
+      timestamp: string;
+      message: string;
+    }>('/cloud-sync/sync', {
+      method: 'POST',
+    }),
 };
 
