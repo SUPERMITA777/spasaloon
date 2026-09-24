@@ -96,6 +96,29 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
       });
     }
 
+    // URL y QR del Perfil de Configuración iOS (.mobileconfig) para instalación autónoma
+    const baseServerUrl = activeTunnelUrl ? activeTunnelUrl : `http://${localIp}:${port}`;
+    let iosProfileUrl = `${baseServerUrl}/api/sync/ios-profile`;
+    if (isTursoReady) {
+      const payloadObj = {
+        s: tursoConfig.salonName || 'Mi Salón Hikari',
+        u: tursoConfig.dbUrl,
+        t: tursoConfig.authToken,
+        v: 1,
+      };
+      const tursoPayloadString = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
+      iosProfileUrl = `${baseServerUrl}/api/sync/ios-profile?setup=${encodeURIComponent(tursoPayloadString)}`;
+    }
+
+    const iosProfileQrCodeDataUrl = await QRCode.toDataURL(iosProfileUrl, {
+      width: 340,
+      margin: 2,
+      color: {
+        dark: '#2A1810',
+        light: '#FFFDFC',
+      },
+    });
+
     res.json({
       success: true,
       localIp,
@@ -115,24 +138,84 @@ syncRouter.get('/mobile-app-info', async (req, res) => {
         mobileUrl: tursoMobileUrl,
         qrCodeDataUrl: tursoQrCodeDataUrl,
       },
+      iosProfile: {
+        profileUrl: iosProfileUrl,
+        qrCodeDataUrl: iosProfileQrCodeDataUrl,
+      },
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// GET /api/sync/ios-profile - Descarga de perfil de configuración WebClip para iOS (instalación nativa autónoma)
+// GET /api/sync/ios-profile - Descarga de perfil de configuración WebClip para iOS (instalación nativa autónoma Camino 3)
 syncRouter.get('/ios-profile', (req, res) => {
   try {
     const localIp = getLocalIpAddress();
     const port = Number(process.env.PORT) || 3100;
-    const targetUrl = activeTunnelUrl ? `${activeTunnelUrl}/mobile` : `http://${localIp}:${port}/mobile`;
+    const baseTargetUrl = activeTunnelUrl ? `${activeTunnelUrl}/mobile` : `http://${localIp}:${port}/mobile`;
+
+    // Revisar si Turso Cloud está configurado para auto-vinculación permanente
+    const tursoConfig = getTursoConfig();
+    const isTursoReady = !!(tursoConfig.dbUrl && tursoConfig.authToken);
+
+    let targetUrl = baseTargetUrl;
+
+    if (isTursoReady) {
+      const payloadObj = {
+        s: tursoConfig.salonName || 'Mi Salón Hikari',
+        u: tursoConfig.dbUrl,
+        t: tursoConfig.authToken,
+        v: 1,
+      };
+      const tursoPayloadString = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
+      targetUrl = `${baseTargetUrl}#turso_setup=${tursoPayloadString}`;
+    }
+
+    // Permitir sobrescribir setup desde query param si viene explícito
+    if (typeof req.query.setup === 'string' && req.query.setup.trim().length > 0) {
+      const baseClean = baseTargetUrl.split('#')[0];
+      targetUrl = `${baseClean}#turso_setup=${req.query.setup.trim()}`;
+    }
+
+    // Permitir url personalizada si se envía por parámetro de consulta
+    if (typeof req.query.url === 'string' && req.query.url.trim().length > 0) {
+      const customUrl = req.query.url.trim();
+      if (isTursoReady && !customUrl.includes('turso_setup=')) {
+        const payloadObj = {
+          s: tursoConfig.salonName || 'Mi Salón Hikari',
+          u: tursoConfig.dbUrl,
+          t: tursoConfig.authToken,
+          v: 1,
+        };
+        const tursoPayloadString = Buffer.from(JSON.stringify(payloadObj)).toString('base64');
+        targetUrl = `${customUrl}#turso_setup=${tursoPayloadString}`;
+      } else {
+        targetUrl = customUrl;
+      }
+    }
 
     let iconBase64 = '';
-    const iconPath = path.resolve(process.cwd(), 'public/apple-touch-icon.png');
-    if (fs.existsSync(iconPath)) {
-      iconBase64 = fs.readFileSync(iconPath).toString('base64');
+    const iconCandidates = [
+      path.resolve(process.cwd(), 'public/apple-touch-icon.png'),
+      path.resolve(process.cwd(), 'public/icon-512.png'),
+      path.resolve(process.cwd(), 'public/icon-192.png'),
+    ];
+
+    for (const p of iconCandidates) {
+      if (fs.existsSync(p)) {
+        iconBase64 = fs.readFileSync(p).toString('base64');
+        break;
+      }
     }
+
+    // Formatear Base64 en líneas estándar de 72 caracteres para Plist XML
+    const formattedIconData = iconBase64
+      ? iconBase64.match(/.{1,72}/g)?.join('\n            ') || iconBase64
+      : '';
+
+    // Escapar caracteres XML en la URL de destino
+    const xmlSafeUrl = targetUrl.replace(/&/g, '&amp;');
 
     const mobileConfigXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -145,7 +228,7 @@ syncRouter.get('/ios-profile', (req, res) => {
             <true/>
             <key>IsRemovable</key>
             <true/>
-            ${iconBase64 ? `<key>Icon</key>\n            <data>\n${iconBase64}\n            </data>` : ''}
+            ${formattedIconData ? `<key>Icon</key>\n            <data>\n            ${formattedIconData}\n            </data>` : ''}
             <key>Label</key>
             <string>Hikari Suite</string>
             <key>PayloadDescription</key>
@@ -163,7 +246,7 @@ syncRouter.get('/ios-profile', (req, res) => {
             <key>Precomposed</key>
             <true/>
             <key>URL</key>
-            <string>${targetUrl}</string>
+            <string>${xmlSafeUrl}</string>
         </dict>
     </array>
     <key>PayloadDisplayName</key>
@@ -181,8 +264,12 @@ syncRouter.get('/ios-profile', (req, res) => {
 </dict>
 </plist>`;
 
-    res.setHeader('Content-Type', 'application/x-apple-as-profile; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="HikariSuite.mobileconfig"');
+    // MIME type oficial de Apple para perfiles de configuración (.mobileconfig) y disposición inline
+    res.setHeader('Content-Type', 'application/x-apple-aspen-config; charset=utf-8');
+    res.setHeader('Content-Disposition', 'inline; filename="HikariSuite.mobileconfig"');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.send(mobileConfigXml);
   } catch (error: any) {
     res.status(500).send(error.message);

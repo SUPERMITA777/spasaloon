@@ -760,6 +760,9 @@ export const AgendaView: React.FC = () => {
                     minute: '2-digit',
                   });
 
+                  const duration = appt.sub_treatment?.duration_minutes || 45;
+                  const showBottomRow = duration >= 50;
+
                   return (
                     <div
                       key={appt.id}
@@ -769,48 +772,49 @@ export const AgendaView: React.FC = () => {
                         e.stopPropagation();
                         setSelectedAppointment(appt);
                       }}
+                      title={`${appt.client?.first_name || ''} ${appt.client?.last_name || ''} — ${appt.sub_treatment?.name || 'Tratamiento'} (${startTimeFormatted} - ${endTimeFormatted})`}
                       style={cardStyle}
-                      className={`absolute left-1.5 right-1.5 rounded-xl p-2.5 border-l-4 border shadow-soft hover:shadow-soft-md transition-all duration-150 cursor-pointer overflow-hidden z-10 flex flex-col justify-between group hover:scale-[1.01] ${
+                      className={`absolute left-1.5 right-1.5 rounded-xl px-2.5 py-1.5 border-l-4 border shadow-soft hover:shadow-soft-md transition-all duration-150 cursor-pointer overflow-hidden z-10 flex flex-col justify-between group hover:scale-[1.01] ${
                         statusColors[appt.status] || 'border-l-rose-gold-500 bg-white'
                       }`}
                     >
-                      {/* Top Row: Client & Time */}
-                      <div className="flex items-start justify-between gap-1">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-graphite-500 leading-tight">
-                            <Clock className="w-3 h-3 text-rose-gold-600 shrink-0" />
-                            <span>{startTimeFormatted} - {endTimeFormatted}</span>
-                          </div>
-                          <h4 className="font-serif font-bold text-xs text-graphite-900 truncate mt-0.5">
+                      {/* Top: Client Name & Drag Handle */}
+                      <div className="min-w-0">
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="font-serif font-bold text-xs text-graphite-900 truncate leading-snug">
                             {appt.client?.first_name} {appt.client?.last_name}
                           </h4>
+                          <GripVertical className="w-3 h-3 text-graphite-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </div>
-                        <GripVertical className="w-3 h-3 text-graphite-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+
+                        {/* Sub-Treatment Name */}
+                        {appt.sub_treatment?.name && (
+                          <div className="text-[11px] font-medium text-rose-gold-800 truncate leading-snug mt-0.5">
+                            {appt.sub_treatment.name}
+                          </div>
+                        )}
                       </div>
 
-                      {/* Middle Row: Sub-Treatment Name */}
-                      <div className="text-[11px] font-semibold text-rose-gold-800 truncate leading-tight">
-                        {appt.sub_treatment?.name}
-                      </div>
-
-                      {/* Bottom Row: Staff/Box and Financials */}
-                      <div className="flex items-center justify-between text-[10px] pt-1 border-t border-rose-gold-200/40">
-                        <span className="text-graphite-600 truncate font-medium">
-                          {viewMode === 'boxes' ? `👩‍⚕️ ${appt.staff?.first_name}` : `🚪 ${appt.box?.name}`}
-                        </span>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {!isCartEmpty && (
-                            <span className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold flex items-center gap-0.5">
-                              <ShoppingCart className="w-2.5 h-2.5" />
-                              {appt.cart_items?.length}
-                            </span>
-                          )}
-                          <span className="font-bold text-graphite-800">
-                            ${appt.total_amount ? appt.total_amount.toLocaleString('es-AR') : appt.service_price.toLocaleString('es-AR')}
+                      {/* Bottom Row: Staff/Box and Financials (for cards with enough height) */}
+                      {showBottomRow && (
+                        <div className="flex items-center justify-between text-[10px] pt-1 border-t border-rose-gold-200/40 mt-auto shrink-0">
+                          <span className="text-graphite-600 truncate font-medium">
+                            {viewMode === 'boxes' ? `👩‍⚕️ ${appt.staff?.first_name}` : `🚪 ${appt.box?.name}`}
                           </span>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {!isCartEmpty && (
+                              <span className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-800 font-bold flex items-center gap-0.5">
+                                <ShoppingCart className="w-2.5 h-2.5" />
+                                {appt.cart_items?.length}
+                              </span>
+                            )}
+                            <span className="font-bold text-graphite-800">
+                              ${appt.total_amount ? appt.total_amount.toLocaleString('es-AR') : appt.service_price.toLocaleString('es-AR')}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

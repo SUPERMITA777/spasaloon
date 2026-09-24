@@ -17,7 +17,9 @@ import {
   Zap,
   Download,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
+import { IosInstallGuideModal } from './IosInstallGuideModal';
 
 interface Props {
   isOpen: boolean;
@@ -29,6 +31,8 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [tunnelLoading, setTunnelLoading] = useState<boolean>(false);
   const [connectionMode, setConnectionMode] = useState<'turso' | 'local' | 'remote'>('turso');
   const [platformTab, setPlatformTab] = useState<'ios' | 'android'>('ios');
+  const [iosInstallMethod, setIosInstallMethod] = useState<'profile' | 'safari'>('profile');
+  const [showIosGuideModal, setShowIosGuideModal] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
   const [info, setInfo] = useState<{
@@ -48,6 +52,10 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
       lastSyncAt: string | null;
       mobileUrl: string | null;
       qrCodeDataUrl: string | null;
+    };
+    iosProfile?: {
+      profileUrl: string;
+      qrCodeDataUrl: string;
     };
   } | null>(null);
 
@@ -97,19 +105,31 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
   };
 
-  const activeUrl =
+  const isIosProfileMode = platformTab === 'ios' && iosInstallMethod === 'profile';
+
+  const defaultUrl =
     connectionMode === 'turso'
       ? info?.turso?.mobileUrl || info?.localMobileUrl || ''
       : connectionMode === 'remote'
       ? info?.remoteMobileUrl || ''
       : info?.localMobileUrl || '';
 
-  const activeQr =
+  const defaultQr =
     connectionMode === 'turso'
       ? info?.turso?.qrCodeDataUrl
       : connectionMode === 'remote'
       ? info?.remoteQrCodeDataUrl
       : info?.localQrCodeDataUrl;
+
+  const activeUrl =
+    isIosProfileMode && info?.iosProfile?.profileUrl
+      ? info.iosProfile.profileUrl
+      : defaultUrl;
+
+  const activeQr =
+    isIosProfileMode && info?.iosProfile?.qrCodeDataUrl
+      ? info.iosProfile.qrCodeDataUrl
+      : defaultQr;
 
   const handleCopy = () => {
     if (activeUrl) {
@@ -328,7 +348,9 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
             <div className="flex items-center gap-1.5 text-rose-gold-800 font-bold uppercase tracking-wider text-[11px]">
               <QrCode className="w-4 h-4 text-rose-gold-600" />
               <span>
-                {connectionMode === 'turso'
+                {isIosProfileMode
+                  ? '🍏 Escanea para Instalar Perfil Autónomo en iPhone'
+                  : connectionMode === 'turso'
                   ? (info?.turso?.isConfigured
                       ? `Escanea para Vincular Automáticamente (${info?.turso?.salonName})`
                       : 'Configuración de Nube Requerida')
@@ -345,7 +367,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   {tunnelLoading ? 'Iniciando enlace Cloudflare...' : 'Generando QR...'}
                 </span>
               </div>
-            ) : connectionMode === 'turso' && !info?.turso?.isConfigured ? (
+            ) : connectionMode === 'turso' && !info?.turso?.isConfigured && !isIosProfileMode ? (
               <div className="w-64 h-64 p-5 flex flex-col items-center justify-center text-center gap-3 bg-silk-100/70 rounded-2xl border-2 border-dashed border-rose-gold-300">
                 <Cloud className="w-10 h-10 text-rose-gold-500/80" />
                 <div>
@@ -363,7 +385,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   <span>Configurar en Ajustes</span>
                 </button>
               </div>
-            ) : connectionMode === 'remote' && !info?.isTunnelActive ? (
+            ) : connectionMode === 'remote' && !info?.isTunnelActive && !isIosProfileMode ? (
               <div className="w-64 h-64 p-5 flex flex-col items-center justify-center text-center gap-3 bg-silk-100/70 rounded-2xl border-2 border-dashed border-rose-gold-300">
                 <Globe className="w-10 h-10 text-rose-gold-500/80" />
                 <div>
@@ -396,11 +418,22 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </div>
             )}
 
-            {connectionMode === 'turso' && info?.turso?.isConfigured && (
+            {isIosProfileMode ? (
+              <div className="text-[11px] text-rose-gold-900 bg-rose-blush-50 px-3.5 py-2.5 rounded-xl border border-rose-gold-200/80 font-medium max-w-sm space-y-1">
+                <div>
+                  ✦ <strong>Flujo Camino 3 Apple:</strong> Enfoca este QR con la cámara de tu iPhone. Safari abrirá directamente la descarga del perfil para pantalla completa sin barras.
+                </div>
+                {info?.turso?.isConfigured && (
+                  <div className="text-[10px] text-emerald-800 font-bold">
+                    ✓ Vinculado a {info.turso.salonName} de forma permanente
+                  </div>
+                )}
+              </div>
+            ) : connectionMode === 'turso' && info?.turso?.isConfigured ? (
               <div className="text-[11px] text-rose-gold-900 bg-rose-blush-50 px-3.5 py-2 rounded-xl border border-rose-gold-200/80 font-medium max-w-sm">
                 ✦ <strong>Auto-vinculación Instantánea:</strong> Abre la cámara de tu iPhone y enfoca este código. Safari abrirá la app y configurará la conexión de <strong>{info?.turso?.salonName}</strong> sin pedirte claves.
               </div>
-            )}
+            ) : null}
 
             {/* Enlace y botón copiar */}
             {activeUrl && (
@@ -476,7 +509,7 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     : 'text-graphite-600 hover:text-graphite-900'
                 }`}
               >
-                <span>🍏 iPhone / iPad (Safari)</span>
+                <span>🍏 iPhone / iPad (iOS)</span>
               </button>
               <button
                 type="button"
@@ -491,30 +524,94 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
               </button>
             </div>
 
+            {/* Sub-selector de Método para iOS */}
+            {platformTab === 'ios' && (
+              <div className="flex bg-silk-100 p-1 rounded-xl border border-rose-gold-200/60 gap-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setIosInstallMethod('profile')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    iosInstallMethod === 'profile'
+                      ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-xs'
+                      : 'text-graphite-600 hover:text-graphite-900'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Camino 3: Perfil Autónomo (Recomendado)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIosInstallMethod('safari')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    iosInstallMethod === 'safari'
+                      ? 'bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 text-white shadow-xs'
+                      : 'text-graphite-600 hover:text-graphite-900'
+                  }`}
+                >
+                  <span>PWA Safari (Compartir)</span>
+                </button>
+              </div>
+            )}
+
             {/* Instrucciones Paso a Paso */}
             <div className="p-4 bg-white rounded-2xl border border-rose-gold-100 space-y-2 text-[11px]">
               {platformTab === 'ios' ? (
-                <div className="space-y-2.5">
-                  <div className="p-2.5 bg-rose-gold-50/70 rounded-xl border border-rose-gold-200">
-                    <span className="font-bold text-rose-gold-900 block mb-1">
-                      ✨ Método Oficial Apple (Safari):
-                    </span>
-                    <ol className="space-y-1 text-graphite-700 list-decimal list-inside leading-relaxed">
-                      <li>Escanea el <strong>código QR</strong> con la cámara de tu iPhone y ábrelo en <strong>Safari</strong>.</li>
-                      <li>Toca el botón inferior de <strong>Compartir</strong> (icono de cuadrado con flecha hacia arriba ⎋).</li>
-                      <li>Baja un poco y selecciona <strong>"Agregar a inicio" (➕)</strong>.</li>
-                      <li>¡Listo! Se crea el icono de Hikari Suite que abre en pantalla completa nativa sin marcos.</li>
-                    </ol>
+                iosInstallMethod === 'profile' ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gradient-to-r from-rose-blush-50 to-silk-50 rounded-xl border border-rose-gold-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-rose-gold-900 flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-rose-gold-600" />
+                          <span>Instalación Camino 3: Perfil Oficial Apple</span>
+                        </span>
+                        <span className="text-[9px] bg-rose-gold-200 text-rose-gold-900 font-bold px-2 py-0.5 rounded-full">
+                          PANTALLA COMPLETA
+                        </span>
+                      </div>
+                      <p className="text-graphite-600 text-[10px] leading-relaxed">
+                        Instala el WebClip nativo que elimina permanentemente las barras de Safari y almacena la base de datos de tu salón para siempre.
+                      </p>
+                      <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed text-[11px] pt-1">
+                        <li><strong>Escanea el código QR</strong> de arriba con la cámara de tu iPhone y ábrelo en Safari.</li>
+                        <li>Toca <strong>"Permitir"</strong> en el aviso del sistema y luego <strong>"Cerrar"</strong>.</li>
+                        <li>Abre <strong>Ajustes del iPhone</strong> ➔ Toca arriba en <strong>"Perfil descargado"</strong> ➔ Pulsa <strong>"Instalar"</strong>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowIosGuideModal(true)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-graphite-800 hover:bg-graphite-900 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-xs"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-rose-gold-300" />
+                        <span>Ver Guía Visual Paso a Paso (3 Pasos)</span>
+                      </button>
+                      <a
+                        href={info?.iosProfile?.profileUrl || '/api/sync/ios-profile'}
+                        className="py-2 px-3 rounded-xl bg-silk-100 hover:bg-silk-200 text-rose-gold-800 border border-rose-gold-200 font-bold text-xs flex items-center gap-1 transition-colors"
+                        title="Descargar archivo .mobileconfig"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Descargar .mobileconfig</span>
+                      </a>
+                    </div>
                   </div>
-                  <div className="p-2.5 bg-silk-100 rounded-xl border border-rose-gold-200 text-graphite-700">
-                    <span className="font-bold text-graphite-900 block mb-1">
-                      🍏 Método Alternativo (Perfil WebClip Apple):
-                    </span>
-                    <p className="leading-relaxed">
-                      Toca el botón <strong>"Perfil iOS (.mobileconfig)"</strong> arriba para descargar el perfil firmado. Luego en Ajustes de iPhone pulsa <em>"Perfil descargado"</em> ➔ <em>"Instalar"</em>.
-                    </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div className="p-2.5 bg-rose-gold-50/70 rounded-xl border border-rose-gold-200">
+                      <span className="font-bold text-rose-gold-900 block mb-1">
+                        ✨ Método Alternativo Safari (PWA):
+                      </span>
+                      <ol className="space-y-1 text-graphite-700 list-decimal list-inside leading-relaxed">
+                        <li>Escanea el <strong>código QR</strong> con la cámara de tu iPhone y ábrelo en <strong>Safari</strong>.</li>
+                        <li>Toca el botón inferior de <strong>Compartir</strong> (icono de cuadrado con flecha hacia arriba ⎋).</li>
+                        <li>Baja un poco y selecciona <strong>"Agregar a inicio" (➕)</strong>.</li>
+                        <li>¡Listo! Se crea el icono de Hikari Suite en la pantalla de inicio.</li>
+                      </ol>
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <ol className="space-y-1.5 text-graphite-700 list-decimal list-inside leading-relaxed">
                   <li>Abre la <strong>Cámara</strong> o Google Lens y escanea el código QR de arriba.</li>
@@ -580,6 +677,15 @@ export const MobileQrModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </div>
+
+      {/* Modal de Guía Visual Paso a Paso para Instalación iOS (Camino 3) */}
+      <IosInstallGuideModal
+        isOpen={showIosGuideModal}
+        onClose={() => setShowIosGuideModal(false)}
+        customProfileUrl={info?.iosProfile?.profileUrl}
+        customQrDataUrl={info?.iosProfile?.qrCodeDataUrl}
+        salonName={info?.turso?.salonName}
+      />
     </div>,
     document.body
   );

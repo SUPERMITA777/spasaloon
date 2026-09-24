@@ -134,7 +134,7 @@ export const ClientsView: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="font-serif font-bold text-2xl text-graphite-900 leading-tight">
-            Clientes & Consultantes
+            Clientes
           </h1>
           <p className="text-xs text-graphite-500 mt-0.5">
             Gestión integral de pacientes, historial clínico, fichas técnicas y consentimientos

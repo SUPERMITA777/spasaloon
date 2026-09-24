@@ -772,7 +772,7 @@ export const MobileAppView: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-silk-50 font-sans text-graphite-900 select-none overflow-hidden">
+    <div className="flex flex-col h-[100dvh] w-screen bg-silk-50 font-sans text-graphite-900 select-none overflow-hidden overscroll-none touch-pan-y">
       {/* Banner de Confirmación de Auto-Vinculación a la Nube Turso */}
       {cloudSetupSuccessNotice && (
         <div className="bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-700 text-white px-4 py-2.5 text-xs flex items-center justify-between shadow-md shrink-0 animate-in fade-in slide-in-from-top duration-300 z-50">
@@ -788,8 +788,13 @@ export const MobileAppView: React.FC = () => {
         </div>
       )}
 
-      {/* Top Mobile Header */}
-      <header className="px-4 py-3 bg-white border-b border-rose-gold-200/70 shadow-xs flex items-center justify-between shrink-0">
+      {/* Top Mobile Header (Safe Area Inset Top adaptativo para iPhone / Dynamic Island) */}
+      <header
+        style={{
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+        }}
+        className="px-4 pb-3 bg-white border-b border-rose-gold-200/70 shadow-xs flex items-center justify-between shrink-0 z-30"
+      >
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setIsDrawerOpen(true)}
@@ -859,8 +864,13 @@ export const MobileAppView: React.FC = () => {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
+      {/* Main Content Area (Acomoda la Bottom Nav y Safe Area Inset Bottom de iOS) */}
+      <main
+        style={{
+          paddingBottom: 'calc(max(0.5rem, env(safe-area-inset-bottom)) + 5.5rem)',
+        }}
+        className="flex-1 overflow-y-auto p-4 space-y-4 overscroll-contain"
+      >
         {/* ========================================================= */}
         {/* TAB 1: AGENDA / TURNOS                                    */}
         {/* ========================================================= */}
@@ -2022,7 +2032,13 @@ export const MobileAppView: React.FC = () => {
       {/* ========================================================= */}
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 bg-graphite-950/70 backdrop-blur-xs flex justify-start animate-fade-in">
-          <div className="w-72 bg-white h-full flex flex-col justify-between p-4 shadow-2xl border-r border-rose-gold-200 overflow-y-auto">
+          <div
+            style={{
+              paddingTop: 'max(1rem, env(safe-area-inset-top))',
+              paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+            }}
+            className="w-72 bg-white h-full flex flex-col justify-between p-4 shadow-2xl border-r border-rose-gold-200 overflow-y-auto"
+          >
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-silk-200">
                 <div className="flex items-center gap-2.5">
@@ -2670,9 +2686,14 @@ export const MobileAppView: React.FC = () => {
       )}
 
       {/* ========================================================= */}
-      {/* NAVEGACIÓN INFERIOR (BOTTOM BAR)                          */}
+      {/* NAVEGACIÓN INFERIOR (BOTTOM BAR ADAPTADA A SAFE AREA iOS) */}
       {/* ========================================================= */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-rose-gold-200/80 px-2 py-2 flex items-center justify-around shadow-lg z-40">
+      <nav
+        style={{
+          paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        }}
+        className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-rose-gold-200/80 px-2 pt-2 flex items-center justify-around shadow-lg z-40"
+      >
         <button
           onClick={() => setActiveTab('agenda')}
           className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-all ${

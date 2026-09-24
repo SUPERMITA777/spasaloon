@@ -63,6 +63,12 @@ app.use('/api/system', updaterRouter);
 app.use('/api/sync', syncRouter);
 app.use('/api/cloud-sync', cloudSyncRouter);
 
+// Acceso directo para perfil Apple iOS (.mobileconfig)
+app.get('/ios-profile', (req, res) => {
+  const qs = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect(302, `/api/sync/ios-profile${qs}`);
+});
+
 // Ruta para cierre ordenado del sistema con backup
 app.post('/api/system/shutdown', async (req, res) => {
   res.json({ success: true, message: 'Iniciando respaldo y apagado del sistema...' });

@@ -198,14 +198,13 @@ export const MobileDownloadPortal: React.FC<Props> = ({ onEnterApp }) => {
               </p>
               <a
                 href="/api/sync/ios-profile"
-                download="HikariSuite.mobileconfig"
                 className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-gold-600 to-rose-gold-700 hover:from-rose-gold-700 hover:to-rose-gold-800 text-white font-bold text-xs shadow-soft flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
               >
                 <Download className="w-4 h-4" />
-                <span>Descargar Perfil para iPhone (.mobileconfig)</span>
+                <span>Instalar Perfil Autónomo para iPhone (.mobileconfig)</span>
               </a>
               <p className="text-[10px] text-graphite-500 italic text-center">
-                * Tras descargarlo: ve a <strong>Ajustes del iPhone</strong> &gt; <strong>Perfil descargado</strong> &gt; <strong>Instalar</strong>.
+                * Al pulsar: toca <strong>"Permitir"</strong> y luego en tu iPhone ve a <strong>Ajustes</strong> &gt; <strong>Perfil descargado</strong> &gt; <strong>Instalar</strong>.
               </p>
             </div>
 

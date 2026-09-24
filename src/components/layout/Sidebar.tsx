@@ -52,7 +52,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onCheckUpdates }) => {
 
   const navItems: NavItem[] = [
     { tab: 'agenda', label: 'Agenda & Boxes', icon: Calendar, badge: todayApptCount > 0 ? todayApptCount : undefined },
-    { tab: 'clients', label: 'Clientes & Consultantes', icon: Users },
+    { tab: 'clients', label: 'Clientes', icon: Users },
     { tab: 'body_charts', label: 'Ficha Corporal & Facial', icon: Activity },
     { tab: 'staff', label: 'Personal & Comisiones', icon: UserCheck },
     { tab: 'treatments', label: 'Tratamientos & Servicios', icon: Sparkles },

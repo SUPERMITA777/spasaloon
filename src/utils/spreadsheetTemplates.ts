@@ -19,7 +19,7 @@ export interface SpreadsheetTemplate {
 export const TEMPLATES: Record<TemplateType, SpreadsheetTemplate> = {
   clientes: {
     type: 'clientes',
-    title: 'Planilla de Clientes & Consultantes',
+    title: 'Planilla de Clientes',
     fileName: 'Plantilla_Ejemplo_Clientes.csv',
     columns: [
       { key: 'Nombre', label: 'Nombre', required: true, example: 'Luciana', description: 'Nombre del cliente' },

@@ -3,9 +3,21 @@
 @tailwind utilities;
 
 @layer base {
-  body {
+  html, body {
     @apply bg-silk-100 text-graphite-800 font-sans antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    overscroll-behavior-y: none;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Safe Area Inset Support for iPhone */
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
   }
 
   /* Custom Scrollbar Elegante */
