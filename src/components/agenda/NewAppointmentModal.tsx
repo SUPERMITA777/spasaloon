@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { SubTreatment, Client } from '../../types';
 import { api } from '../../services/api';
-import { X, Sparkles, Clock, Calendar, LayoutGrid, User, UserCheck, DollarSign, UserPlus, Search, Phone } from 'lucide-react';
+import { X, Sparkles, Clock, Calendar, LayoutGrid, User, UserCheck, DollarSign, UserPlus, Search, Phone, Check } from 'lucide-react';
 
 interface Props {
   initialBoxId?: string;
@@ -50,7 +50,18 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
     }))
   );
 
+  // Tratamiento / Servicio - búsqueda y selección rápida
   const [subTreatmentId, setSubTreatmentId] = useState<string>(allSubTreatments[0]?.id || '');
+  const [treatmentSearch, setTreatmentSearch] = useState<string>(
+    allSubTreatments[0]
+      ? `${allSubTreatments[0].categoryName} — ${allSubTreatments[0].name}`
+      : ''
+  );
+  const [showTreatmentDropdown, setShowTreatmentDropdown] = useState(false);
+  const [treatmentHighlightedIndex, setTreatmentHighlightedIndex] = useState(-1);
+  const treatmentInputRef = useRef<HTMLInputElement>(null);
+  const treatmentDropdownRef = useRef<HTMLDivElement>(null);
+
   const [startTime, setStartTime] = useState<string>(initialTime || '10:00');
   const [depositAmount, setDepositAmount] = useState<number>(0);
   const [depositPaymentMethod, setDepositPaymentMethod] = useState<string>('cash');
@@ -59,6 +70,72 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
 
   const selectedSub = allSubTreatments.find((st) => st.id === subTreatmentId);
   const selectedClient = clients.find((c) => c.id === clientId);
+
+  // Normalización para búsquedas sin tildes ni mayúsculas
+  const normalize = (text: string) =>
+    (text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+  // Sincronizar tratamiento inicial si cargaron después
+  useEffect(() => {
+    if (!subTreatmentId && !treatmentSearch && allSubTreatments.length > 0) {
+      setSubTreatmentId(allSubTreatments[0].id);
+      setTreatmentSearch(`${allSubTreatments[0].categoryName} — ${allSubTreatments[0].name}`);
+    }
+  }, [allSubTreatments]);
+
+  // Filtrar tratamientos por búsqueda
+  const isSearchMatchingSelectedTreatment =
+    Boolean(selectedSub) &&
+    treatmentSearch.trim().toLowerCase() === `${selectedSub?.categoryName} — ${selectedSub?.name}`.toLowerCase();
+
+  const filteredTreatments = (!treatmentSearch.trim() || isSearchMatchingSelectedTreatment)
+    ? allSubTreatments
+    : allSubTreatments.filter((st) => {
+        const query = normalize(treatmentSearch);
+        const name = normalize(st.name);
+        const cat = normalize(st.categoryName);
+        const combined = `${cat} ${name}`;
+        return combined.includes(query) || name.includes(query) || cat.includes(query);
+      });
+
+  const handleSelectTreatment = (st: typeof allSubTreatments[0]) => {
+    setSubTreatmentId(st.id);
+    setTreatmentSearch(`${st.categoryName} — ${st.name}`);
+    setShowTreatmentDropdown(false);
+    setTreatmentHighlightedIndex(-1);
+  };
+
+  const handleTreatmentInputChange = (value: string) => {
+    setTreatmentSearch(value);
+    const exact = allSubTreatments.find(
+      (st) => `${st.categoryName} — ${st.name}`.toLowerCase() === value.trim().toLowerCase()
+    );
+    setSubTreatmentId(exact ? exact.id : '');
+    setShowTreatmentDropdown(true);
+    setTreatmentHighlightedIndex(0);
+  };
+
+  const handleTreatmentKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setTreatmentHighlightedIndex((prev) => Math.min(prev + 1, filteredTreatments.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setTreatmentHighlightedIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (treatmentHighlightedIndex >= 0 && filteredTreatments[treatmentHighlightedIndex]) {
+        handleSelectTreatment(filteredTreatments[treatmentHighlightedIndex]);
+      } else if (filteredTreatments.length === 1) {
+        handleSelectTreatment(filteredTreatments[0]);
+      }
+    } else if (e.key === 'Escape') {
+      setShowTreatmentDropdown(false);
+    }
+  };
 
   // Filtrar clientes por búsqueda
   const filteredClients = clientSearch.trim()
@@ -70,9 +147,10 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
       })
     : clients;
 
-  // Cerrar dropdown al hacer clic fuera
+  // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      // Dropdown de clientes
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(e.target as Node) &&
@@ -80,6 +158,15 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
         !clientInputRef.current.contains(e.target as Node)
       ) {
         setShowClientDropdown(false);
+      }
+      // Dropdown de tratamientos
+      if (
+        treatmentDropdownRef.current &&
+        !treatmentDropdownRef.current.contains(e.target as Node) &&
+        treatmentInputRef.current &&
+        !treatmentInputRef.current.contains(e.target as Node)
+      ) {
+        setShowTreatmentDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -253,29 +340,103 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col bg-silk-50/50">
           <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 flex-1">
-          {/* Sub-treatment Selection */}
-          <div>
+          {/* Sub-treatment Selection with Autocomplete Search */}
+          <div className="relative">
             <label className="block text-xs font-semibold text-graphite-700 mb-1">
               Tratamiento / Servicio a Realizar *
             </label>
-            <select
-              value={subTreatmentId}
-              onChange={(e) => setSubTreatmentId(e.target.value)}
-              required
-              className="w-full text-xs p-2.5 rounded-xl bg-white border border-rose-gold-200 text-graphite-800 focus:outline-none focus:ring-1 focus:ring-rose-gold-400"
-            >
-              {allSubTreatments.map((st) => (
-                <option key={st.id} value={st.id}>
-                  {st.categoryName} — {st.name} ({st.duration_minutes} min | ${st.base_price.toLocaleString('es-AR')})
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-graphite-400" />
+              <input
+                ref={treatmentInputRef}
+                type="text"
+                value={treatmentSearch}
+                onChange={(e) => handleTreatmentInputChange(e.target.value)}
+                onFocus={(e) => {
+                  setShowTreatmentDropdown(true);
+                  e.target.select();
+                }}
+                onKeyDown={handleTreatmentKeyDown}
+                placeholder="Escribí o buscá el servicio o tratamiento..."
+                className={`w-full text-xs p-2.5 pl-9 pr-10 rounded-xl border focus:outline-none focus:ring-1 ${
+                  subTreatmentId
+                    ? 'bg-green-50 border-green-300 text-green-950 focus:ring-green-400 font-medium'
+                    : 'bg-white border-rose-gold-200 text-graphite-800 focus:ring-rose-gold-400'
+                }`}
+              />
+              {subTreatmentId ? (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: selectedSub?.categoryColor || '#C59B7E' }}
+                  />
+                  <Check className="w-4 h-4 text-green-600" />
+                </div>
+              ) : null}
+            </div>
+
+            {/* Dropdown de resultados de tratamientos */}
+            {showTreatmentDropdown && (
+              <div
+                ref={treatmentDropdownRef}
+                className="absolute z-30 mt-1 w-full bg-white rounded-2xl border border-rose-gold-200 shadow-soft-lg max-h-52 overflow-y-auto"
+              >
+                {filteredTreatments.length > 0 ? (
+                  filteredTreatments.map((st, idx) => {
+                    const isSelected = st.id === subTreatmentId;
+                    const isHighlighted = idx === treatmentHighlightedIndex;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => handleSelectTreatment(st)}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs transition-colors border-b border-rose-gold-50/60 last:border-b-0 ${
+                          isHighlighted || isSelected
+                            ? 'bg-rose-gold-50 text-rose-gold-950 font-medium'
+                            : 'hover:bg-silk-50 text-graphite-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                            style={{ backgroundColor: st.categoryColor || '#C59B7E' }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-rose-gold-700 block truncate">
+                              {st.categoryName}
+                            </span>
+                            <span className="font-semibold text-xs text-graphite-900 block truncate">
+                              {st.name}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0 flex flex-col items-end">
+                          <span className="text-xs font-bold text-graphite-900">
+                            ${st.base_price.toLocaleString('es-AR')}
+                          </span>
+                          <span className="text-[10px] text-graphite-500 font-medium">
+                            {st.duration_minutes} min
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="p-4 text-center">
+                    <p className="text-xs text-graphite-500">
+                      No se encontraron servicios para "<b>{treatmentSearch}</b>"
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Client Search + Autocomplete */}
           <div className="relative">
             <label className="block text-xs font-semibold text-graphite-700 mb-1">
-              Cliente / Consultante *
+              Cliente *
             </label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-graphite-400" />
@@ -481,7 +642,7 @@ export const NewAppointmentModal: React.FC<Props> = ({ initialBoxId, initialTime
 
             <button
               type="submit"
-              disabled={loading || !clientId}
+              disabled={loading || !clientId || !subTreatmentId}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-gold-500 to-rose-gold-600 hover:from-rose-gold-600 hover:to-rose-gold-700 text-white text-xs font-semibold shadow-soft transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {loading ? 'Agendando...' : 'Confirmar Turno'}
