@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
+import { parseMoneyOrNumber, parseInteger } from '../utils.js';
 
 export const treatmentsRouter = Router();
 
@@ -243,6 +244,14 @@ treatmentsRouter.post('/batch', (req, res) => {
         INSERT INTO treatments (id, name, category, description, color_code, icon_name, is_active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 'Sparkles', 1, ?, ?)
       `);
+      const getSub = db.prepare(`
+        SELECT id FROM sub_treatments WHERE treatment_id = ? AND LOWER(name) = LOWER(?) AND deleted_at IS NULL
+      `);
+      const updateSub = db.prepare(`
+        UPDATE sub_treatments
+        SET duration_minutes = ?, base_price = ?, is_active = 1, updated_at = ?
+        WHERE id = ?
+      `);
       const insertSub = db.prepare(`
         INSERT INTO sub_treatments (
           id, treatment_id, name, duration_minutes, base_price, allowed_days_json,
@@ -268,24 +277,34 @@ treatmentsRouter.post('/batch', (req, res) => {
           insertTreatment.run(treatmentId, categoryName, 'facial', item.description || null, assignedColor, now, now);
         }
 
-        const subId = uuidv4();
-        insertSub.run(
-          subId,
-          treatmentId,
-          subName.trim(),
-          Number(item.duration_minutes) || 45,
-          Number(item.base_price) || 0,
-          now,
-          now
-        );
+        const parsedDuration = parseInteger(item.duration_minutes, 45);
+        const parsedPrice = parseMoneyOrNumber(item.base_price);
+
+        const existingSub = getSub.get(treatmentId, subName.trim()) as { id: string } | undefined;
+        if (existingSub) {
+          updateSub.run(parsedDuration, parsedPrice, now, existingSub.id);
+        } else {
+          const subId = uuidv4();
+          insertSub.run(
+            subId,
+            treatmentId,
+            subName.trim(),
+            parsedDuration,
+            parsedPrice,
+            now,
+            now
+          );
+        }
         importedCount++;
       }
     });
 
     insertBatch();
-    res.json({ success: true, count: importedCount, message: `Se importaron ${importedCount} servicios/tratamientos con éxito.` });
+    io.emit('treatment:updated');
+    res.json({ success: true, count: importedCount, message: `Se importaron y actualizaron ${importedCount} servicios/tratamientos con éxito.` });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
+
 

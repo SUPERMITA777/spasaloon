@@ -1,9 +1,9 @@
 {
-  "version": "1.0.23",
+  "version": "1.0.24",
   "appName": "Hikari Suite",
-  "releaseDate": "2026-09-23",
+  "releaseDate": "2026-09-24",
   "downloadUrl": "https://drive.google.com/drive/u/0/folders/157PVYzZe5ObkAYwC26DOwbr88YGyGAwc",
-  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.23/Hikari.Suite.Setup.1.0.23.exe",
-  "installerFileName": "Hikari Suite Setup 1.0.23.exe",
-  "changelog": "Versión 1.0.23: Código QR inteligente con auto-vinculación a la nube Turso y sincronización directa 24/7 en dispositivos móviles."
+  "directDownloadUrl": "https://github.com/SUPERMITA777/spasaloon/releases/download/v1.0.24/Hikari.Suite.Setup.1.0.24.exe",
+  "installerFileName": "Hikari Suite Setup 1.0.24.exe",
+  "changelog": "Versión 1.0.24: Soporte universal y robusto de parseo de precios con formato moneda ($ 3.000,00, $18,000.00, $31,000, $100.000, 2 X $80.000), codificación Windows-1252/ANSI y actualización automática (upsert) en importaciones masivas."
 }

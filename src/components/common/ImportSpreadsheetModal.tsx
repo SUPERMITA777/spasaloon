@@ -5,6 +5,8 @@ import {
   downloadTemplateCSV,
   parseCSV,
   normalizeKey,
+  parseMoneyOrNumber,
+  parseInteger,
 } from '../../utils/spreadsheetTemplates';
 import { api } from '../../services/api';
 import {
@@ -58,7 +60,24 @@ export const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const text = event.target?.result as string;
+        const buffer = event.target?.result as ArrayBuffer;
+        let text = '';
+        try {
+          const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+          text = utf8Decoder.decode(buffer);
+        } catch {
+          // Decodificación alternativa para archivos guardados en formato ANSI / Windows-1252 por Excel
+          const winDecoder = new TextDecoder('windows-1252');
+          text = winDecoder.decode(buffer);
+        }
+
+        // Corrección de caracteres con símbolo de reemplazo común en exportaciones de Excel
+        text = text
+          .replace(/UAS/gi, 'UÑAS')
+          .replace(/PESTAAS/gi, 'PESTAÑAS')
+          .replace(/DISEO/gi, 'DISEÑO')
+          .replace(/AO/gi, 'AÑO');
+
         const { headers, rows } = parseCSV(text);
 
         if (rows.length === 0) {
@@ -75,7 +94,7 @@ export const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({
     reader.onerror = () => {
       setError('No se pudo leer el archivo seleccionado.');
     };
-    reader.readAsText(selectedFile, 'UTF-8');
+    reader.readAsArrayBuffer(selectedFile);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -119,41 +138,41 @@ export const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({
         }
 
         if (type === 'productos') {
-          const esVentaVal = String(normalizedRow['esventa'] || '').toUpperCase();
-          const esCabinaVal = String(normalizedRow['esusocabina'] || '').toUpperCase();
+          const esVentaVal = String(normalizedRow['esventa'] || normalizedRow['venta'] || '').toUpperCase();
+          const esCabinaVal = String(normalizedRow['esusocabina'] || normalizedRow['cabina'] || normalizedRow['usocabina'] || '').toUpperCase();
           return {
-            name: normalizedRow['nombre'] || normalizedRow['producto'] || '',
-            category: normalizedRow['categoria'] || 'General',
+            name: normalizedRow['nombre'] || normalizedRow['producto'] || normalizedRow['item'] || '',
+            category: normalizedRow['categoria'] || normalizedRow['rubro'] || 'General',
             brand: normalizedRow['marca'] || null,
-            cost_price: Number(normalizedRow['preciocosto'] || normalizedRow['costo']) || 0,
-            sale_price: Number(normalizedRow['precioventa'] || normalizedRow['precio']) || 0,
-            stock_quantity: Number(normalizedRow['stock'] || normalizedRow['cantidad']) || 0,
-            min_stock_alert: Number(normalizedRow['stockminimo'] || normalizedRow['minimo']) || 5,
+            cost_price: parseMoneyOrNumber(normalizedRow['preciocosto'] || normalizedRow['costo'] || normalizedRow['costprice']),
+            sale_price: parseMoneyOrNumber(normalizedRow['precioventa'] || normalizedRow['precio'] || normalizedRow['saleprice'] || normalizedRow['valor'] || normalizedRow['monto']),
+            stock_quantity: parseMoneyOrNumber(normalizedRow['stock'] || normalizedRow['cantidad'] || normalizedRow['stockquantity']),
+            min_stock_alert: parseMoneyOrNumber(normalizedRow['stockminimo'] || normalizedRow['minimo'] || normalizedRow['minstock']) || 5,
             is_for_sale: esVentaVal !== 'NO' && esVentaVal !== '0',
             is_internal_supply: esCabinaVal === 'SI' || esCabinaVal === '1',
-            notes: normalizedRow['notas'] || null,
+            notes: normalizedRow['notas'] || normalizedRow['descripcion'] || null,
           };
         }
 
         if (type === 'profesionales') {
           return {
-            first_name: normalizedRow['nombre'] || '',
-            last_name: normalizedRow['apellido'] || '',
-            phone: normalizedRow['telefono'] || normalizedRow['celular'] || '',
-            email: normalizedRow['email'] || null,
-            role: normalizedRow['rol'] || 'esteticista',
-            default_commission_rate: Number(normalizedRow['porcentajecomision'] || normalizedRow['comision']) || 30,
+            first_name: normalizedRow['nombre'] || normalizedRow['firstname'] || '',
+            last_name: normalizedRow['apellido'] || normalizedRow['lastname'] || '',
+            phone: normalizedRow['telefono'] || normalizedRow['celular'] || normalizedRow['phone'] || '',
+            email: normalizedRow['email'] || normalizedRow['correo'] || null,
+            role: normalizedRow['rol'] || normalizedRow['puesto'] || 'esteticista',
+            default_commission_rate: parseMoneyOrNumber(normalizedRow['porcentajecomision'] || normalizedRow['comision'] || normalizedRow['commission']) || 30,
             pin_code: String(normalizedRow['pinacceso'] || normalizedRow['pin'] || '1234'),
           };
         }
 
         if (type === 'tratamientos') {
           return {
-            category_name: normalizedRow['categoria'] || 'General',
-            sub_name: normalizedRow['nombreservicio'] || normalizedRow['servicio'] || normalizedRow['nombre'] || '',
-            duration_minutes: Number(normalizedRow['duracionminutos'] || normalizedRow['duracion']) || 45,
-            base_price: Number(normalizedRow['preciobase'] || normalizedRow['precio']) || 0,
-            description: normalizedRow['descripcion'] || null,
+            category_name: (normalizedRow['categoria'] || normalizedRow['category'] || normalizedRow['rubro'] || normalizedRow['tipo'] || 'General').trim(),
+            sub_name: (normalizedRow['nombreservicio'] || normalizedRow['servicio'] || normalizedRow['subtratamiento'] || normalizedRow['nombre'] || normalizedRow['tratamiento'] || normalizedRow['item'] || normalizedRow['descripcion'] || 'Servicio General').trim(),
+            duration_minutes: parseInteger(normalizedRow['duracionminutos'] || normalizedRow['duracion'] || normalizedRow['tiempo'] || normalizedRow['minutos'], 45),
+            base_price: parseMoneyOrNumber(normalizedRow['preciobase'] || normalizedRow['precio'] || normalizedRow['baseprice'] || normalizedRow['price'] || normalizedRow['valor'] || normalizedRow['monto'] || normalizedRow['tarifa'] || normalizedRow['arancel'] || normalizedRow['costo']),
+            description: normalizedRow['descripcion'] || normalizedRow['detalle'] || normalizedRow['notas'] || normalizedRow['observaciones'] || normalizedRow['zona'] || null,
           };
         }
 
@@ -286,20 +305,20 @@ export const ImportSpreadsheetModal: React.FC<ImportSpreadsheetModalProps> = ({
 
             {/* Vista Previa de Filas */}
             {parsedRows.length > 0 && (
-              <div className="border border-rose-gold-200 rounded-2xl overflow-hidden max-h-48 overflow-y-auto">
-                <table className="w-full text-left border-collapse text-[11px]">
-                  <thead className="sticky top-0 bg-silk-200/90 text-graphite-700 font-bold border-b border-rose-gold-200">
+              <div className="border border-rose-gold-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto overflow-x-auto shadow-inner bg-white">
+                <table className="w-full text-left border-collapse text-[11px] min-w-full">
+                  <thead className="sticky top-0 bg-silk-200/90 backdrop-blur-sm text-graphite-700 font-bold border-b border-rose-gold-200 z-10">
                     <tr>
-                      {rawHeaders.slice(0, 5).map((h, i) => (
-                        <th key={i} className="py-2 px-3">{h}</th>
+                      {rawHeaders.map((h, i) => (
+                        <th key={i} className="py-2 px-3 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-rose-gold-100 bg-white">
-                    {parsedRows.slice(0, 5).map((r, rowIdx) => (
-                      <tr key={rowIdx} className="hover:bg-silk-50">
-                        {rawHeaders.slice(0, 5).map((h, colIdx) => (
-                          <td key={colIdx} className="py-1.5 px-3 truncate max-w-[150px]">
+                    {parsedRows.slice(0, 8).map((r, rowIdx) => (
+                      <tr key={rowIdx} className="hover:bg-silk-50/70 transition-colors">
+                        {rawHeaders.map((h, colIdx) => (
+                          <td key={colIdx} className="py-1.5 px-3 truncate max-w-[200px] text-graphite-800">
                             {String(r[h] ?? '')}
                           </td>
                         ))}

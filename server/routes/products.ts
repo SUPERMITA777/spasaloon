@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db/database.js';
 import { v4 as uuidv4 } from 'uuid';
 import { io } from '../index.js';
+import { parseMoneyOrNumber } from '../utils.js';
 
 export const productsRouter = Router();
 
@@ -166,7 +167,17 @@ productsRouter.post('/batch', (req, res) => {
     let importedCount = 0;
 
     const insertBatch = db.transaction(() => {
-      const stmt = db.prepare(`
+      const getProduct = db.prepare(`
+        SELECT id FROM products WHERE (LOWER(name) = LOWER(?) OR (sku IS NOT NULL AND sku = ?)) AND deleted_at IS NULL
+      `);
+      const updateProduct = db.prepare(`
+        UPDATE products SET
+          category = ?, brand = COALESCE(?, brand), cost_price = ?, sale_price = ?,
+          stock_quantity = ?, min_stock_alert = ?, is_internal_supply = ?, is_for_sale = ?,
+          notes = COALESCE(?, notes), updated_at = ?
+        WHERE id = ?
+      `);
+      const insertProduct = db.prepare(`
         INSERT INTO products (
           id, name, barcode, sku, category, brand, cost_price, sale_price,
           stock_quantity, min_stock_alert, unit, is_internal_supply, is_for_sale,
@@ -177,32 +188,56 @@ productsRouter.post('/batch', (req, res) => {
 
       for (const item of items) {
         if (!item.name || !item.name.trim()) continue;
-        const id = uuidv4();
-        stmt.run(
-          id,
-          item.name.trim(),
-          item.barcode || null,
-          item.sku || null,
-          item.category?.trim() || 'General',
-          item.brand?.trim() || null,
-          Number(item.cost_price) || 0,
-          Number(item.sale_price) || 0,
-          Number(item.stock_quantity) || 0,
-          Number(item.min_stock_alert) || 5,
-          item.unit?.trim() || 'unidad',
-          item.is_internal_supply ? 1 : 0,
-          item.is_for_sale !== false ? 1 : 0,
-          item.supplier || null,
-          item.notes || null,
-          now,
-          now
-        );
+        const trimmedName = item.name.trim();
+        const costPrice = parseMoneyOrNumber(item.cost_price);
+        const salePrice = parseMoneyOrNumber(item.sale_price);
+        const stockQty = parseMoneyOrNumber(item.stock_quantity);
+        const minStock = parseMoneyOrNumber(item.min_stock_alert) || 5;
+
+        const existing = getProduct.get(trimmedName, item.sku || null) as { id: string } | undefined;
+        if (existing) {
+          updateProduct.run(
+            item.category?.trim() || 'General',
+            item.brand?.trim() || null,
+            costPrice,
+            salePrice,
+            stockQty,
+            minStock,
+            item.is_internal_supply ? 1 : 0,
+            item.is_for_sale !== false ? 1 : 0,
+            item.notes || null,
+            now,
+            existing.id
+          );
+        } else {
+          const id = uuidv4();
+          insertProduct.run(
+            id,
+            trimmedName,
+            item.barcode || null,
+            item.sku || null,
+            item.category?.trim() || 'General',
+            item.brand?.trim() || null,
+            costPrice,
+            salePrice,
+            stockQty,
+            minStock,
+            item.unit?.trim() || 'unidad',
+            item.is_internal_supply ? 1 : 0,
+            item.is_for_sale !== false ? 1 : 0,
+            item.supplier || null,
+            item.notes || null,
+            now,
+            now
+          );
+        }
         importedCount++;
       }
     });
 
     insertBatch();
-    res.json({ success: true, count: importedCount, message: `Se importaron ${importedCount} productos con éxito.` });
+    io.emit('product:updated');
+    res.json({ success: true, count: importedCount, message: `Se importaron y actualizaron ${importedCount} productos con éxito.` });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
